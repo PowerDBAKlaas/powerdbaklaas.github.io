@@ -11,7 +11,7 @@
 Connect-PowerBIServiceAccount
 
 # Get token from the session
-$tokenResponse = Invoke-PowerBIRestMethod -Url "admin/workspaces" -Method Get
+# $tokenResponse = Invoke-PowerBIRestMethod -Url "admin/workspaces" -Method Get
 # Extract token from the module's internal session
 $token = (Get-PowerBIAccessToken)["Authorization"].Replace("Bearer ", "")
 
@@ -34,7 +34,28 @@ $token = $tokenResponse.access_token
 
 # 2. INITIATE SCAN
 # ============================================================================
+# ============================================================================
+# STEP 1: GET ALL WORKSPACE IDs FIRST
+# ============================================================================
 
+Write-Host "Retrieving all workspace IDs..." -ForegroundColor Cyan
+
+# Get all workspaces (requires Power BI Admin)
+$allWorkspaces = Get-PowerBIWorkspace -Scope Organization -All
+
+# Extract just the IDs
+$workspaceIds = $allWorkspaces | Select-Object -ExpandProperty Id
+
+Write-Host "Found $($workspaceIds.Count) workspaces to scan" -ForegroundColor Green
+
+# ============================================================================
+# STEP 2: BUILD SCAN REQUEST WITH ALL WORKSPACE IDs
+# ============================================================================
+
+# Option A: Scan ALL workspaces
+$scanBody = @{
+    workspaces = @($workspaceIds)
+} | ConvertTo-Json
 $headers = @{
     'Authorization' = "Bearer $token"
     'Content-Type'  = 'application/json'
@@ -42,11 +63,6 @@ $headers = @{
 
 # Base URI - NO personalization needed, this is the standard endpoint
 $baseUri = "https://api.powerbi.com/v1.0/myorg/admin"
-
-# Scan request body - specify what metadata to retrieve
-$scanBody = @{
-    workspaces = @()  # Empty array = scan ALL workspaces in tenant
-} | ConvertTo-Json
 
 # Optional: Scan specific workspaces only
 <#
