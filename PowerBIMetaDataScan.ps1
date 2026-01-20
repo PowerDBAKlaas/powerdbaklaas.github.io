@@ -40,22 +40,41 @@ $token = $tokenResponse.access_token
 
 Write-Host "Retrieving all workspace IDs..." -ForegroundColor Cyan
 
-# Get all workspaces (requires Power BI Admin)
+# Get all workspace IDs
 $allWorkspaces = Get-PowerBIWorkspace -Scope Organization -All
-
-# Extract just the IDs
 $workspaceIds = $allWorkspaces | Select-Object -ExpandProperty Id
 
 Write-Host "Found $($workspaceIds.Count) workspaces to scan" -ForegroundColor Green
+
+# CRITICAL: Format the request body correctly
+# The API expects an array of strings, not objects
+
+$scanRequest = @{
+    workspaces = @($workspaceIds | ForEach-Object { $_.ToString() })
+}
+
+# Convert to JSON with proper depth
+$scanBody = $scanRequest | ConvertTo-Json -Depth 3
+
+# Debug: Show what you're sending
+Write-Host "`nScan request body:" -ForegroundColor Yellow
+Write-Host $scanBody -ForegroundColor Gray
+
+# The JSON should look like this:
+# {
+#   "workspaces": [
+#     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+#     "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
+#   ]
+# }
+
 
 # ============================================================================
 # STEP 2: BUILD SCAN REQUEST WITH ALL WORKSPACE IDs
 # ============================================================================
 
 # Option A: Scan ALL workspaces
-$scanBody = @{
-    workspaces = @($workspaceIds)
-} | ConvertTo-Json
+
 $headers = @{
     'Authorization' = "Bearer $token"
     'Content-Type'  = 'application/json'
