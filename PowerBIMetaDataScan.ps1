@@ -4,162 +4,162 @@
 # To be reviewed !!!
 # ============================================================================
 
-# 1. AUTHENTICATION - Get Bearer Token
+# 1. AUTHENTICATION
 # ============================================================================
 
-# Method A: Interactive (easiest for testing)
 Connect-PowerBIServiceAccount
-
-# Get token from the session
-# $tokenResponse = Invoke-PowerBIRestMethod -Url "admin/workspaces" -Method Get
-# Extract token from the module's internal session
 $token = (Get-PowerBIAccessToken)["Authorization"].Replace("Bearer ", "")
-
-# Method B: Service Principal (for automation)
-<#
-$tenantId = "your-tenant-id"
-$clientId = "your-app-id"
-$clientSecret = "your-client-secret"
-
-$body = @{
-    grant_type    = "client_credentials"
-    client_id     = $clientId
-    client_secret = $clientSecret
-    resource      = "https://analysis.windows.net/powerbi/api"
-}
-
-$tokenResponse = Invoke-RestMethod -Method Post -Uri "https://login.microsoftonline.com/$tenantId/oauth2/token" -Body $body
-$token = $tokenResponse.access_token
-#>
-
-# 2. INITIATE SCAN
-# ============================================================================
-# ============================================================================
-# STEP 1: GET ALL WORKSPACE IDs FIRST
-# ============================================================================
-
-Write-Host "Retrieving all workspace IDs..." -ForegroundColor Cyan
-
-# Get all workspace IDs
-$allWorkspaces = Get-PowerBIWorkspace -Scope Organization -All
-$workspaceIds = $allWorkspaces | Select-Object -ExpandProperty Id
-
-Write-Host "Found $($workspaceIds.Count) workspaces to scan" -ForegroundColor Green
-
-# CRITICAL: Format the request body correctly
-# The API expects an array of strings, not objects
-
-$scanRequest = @{
-    workspaces = @($workspaceIds | ForEach-Object { $_.ToString() })
-}
-
-# Convert to JSON with proper depth
-$scanBody = $scanRequest | ConvertTo-Json -Depth 3
-
-# Debug: Show what you're sending
-Write-Host "`nScan request body:" -ForegroundColor Yellow
-Write-Host $scanBody -ForegroundColor Gray
-
-# The JSON should look like this:
-# {
-#   "workspaces": [
-#     "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-#     "yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy"
-#   ]
-# }
-
-
-# ============================================================================
-# STEP 2: BUILD SCAN REQUEST WITH ALL WORKSPACE IDs
-# ============================================================================
-
-# Option A: Scan ALL workspaces
 
 $headers = @{
     'Authorization' = "Bearer $token"
-    'Content-Type'  = 'application/json'
+    'Content-Type'  = 'application/json; charset=utf-8'
 }
 
-# Base URI - NO personalization needed, this is the standard endpoint
 $baseUri = "https://api.powerbi.com/v1.0/myorg/admin"
-
-# Optional: Scan specific workspaces only
-<#
-$scanBody = @{
-    workspaces = @(
-        "workspace-guid-1",
-        "workspace-guid-2"
-    )
-} | ConvertTo-Json
-#>
-
-# Parameters for scan (all optional, but recommended for complete metadata)
-$scanParams = @(
-    "lineage=True",                    # Data lineage information
-    "datasourceDetails=True",          # Connection strings, credentials info
-    "datasetSchema=True",              # Table/column schemas
-    "datasetExpressions=True",         # DAX measures, calculated columns
-    "getArtifactUsers=True"            # User access permissions
-) -join "&"
-
+$scanParams = "lineage=True&datasourceDetails=True&datasetSchema=True&datasetExpressions=True&getArtifactUsers=True"
 $scanUrl = "$baseUri/workspaces/getInfo?$scanParams"
 
-Write-Host "Initiating metadata scan..." -ForegroundColor Cyan
-
-try {
-    $scanResponse = Invoke-RestMethod -Method Post -Uri $scanUrl -Headers $headers -Body $scanBody
-    $scanId = $scanResponse.id
-    Write-Host "Scan initiated successfully. Scan ID: $scanId" -ForegroundColor Green
-}
-catch {
-    Write-Host "Error initiating scan: $_" -ForegroundColor Red
-    exit
-}
-
-# 3. POLL SCAN STATUS
+# 2. GET ALL WORKSPACES
 # ============================================================================
 
-$statusUrl = "$baseUri/workspaces/scanStatus/$scanId"
-$maxWaitMinutes = 30
-$waitSeconds = 10
-$elapsedMinutes = 0
+Write-Host "Retrieving all workspaces..." -ForegroundColor Cyan
+$allWorkspaces = Get-PowerBIWorkspace -Scope Organization -All
+$workspaceIds = $allWorkspaces | ForEach-Object { $_.Id.ToString() }
 
-Write-Host "Waiting for scan to complete..." -ForegroundColor Cyan
+Write-Host "Found $($workspaceIds.Count) total workspaces" -ForegroundColor Green
 
-do {
-    Start-Sleep -Seconds $waitSeconds
-    $elapsedMinutes += $waitSeconds / 60
+# 3. SPLIT INTO BATCHES OF 100
+# ============================================================================
+
+$batchSize = 100
+$totalBatches = [Math]::Ceiling($workspaceIds.Count / $batchSize)
+$allScanResults = @()
+
+Write-Host "Will process $totalBatches batches of up to $batchSize workspaces each`n" -ForegroundColor Yellow
+
+for ($batchNum = 0; $batchNum -lt $totalBatches; $batchNum++) {
     
-    $status = Invoke-RestMethod -Method Get -Uri $statusUrl -Headers $headers
+    $startIndex = $batchNum * $batchSize
+    $endIndex = [Math]::Min($startIndex + $batchSize - 1, $workspaceIds.Count - 1)
+    $batchIds = $workspaceIds[$startIndex..$endIndex]
     
-    Write-Host "Status: $($status.status) - Elapsed: $([math]::Round($elapsedMinutes, 1)) minutes" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "BATCH $($batchNum + 1) of $totalBatches" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "Workspaces: $($batchIds.Count) (indices $startIndex to $endIndex)" -ForegroundColor White
     
-    if ($elapsedMinutes -ge $maxWaitMinutes) {
-        Write-Host "Scan timeout after $maxWaitMinutes minutes" -ForegroundColor Red
-        exit
+    # 4. BUILD SCAN REQUEST FOR THIS BATCH
+    # ========================================================================
+    
+    $workspaceJsonArray = ($batchIds | ForEach-Object { "`"$_`"" }) -join ",`n    "
+    $scanBody = @"
+{
+  "workspaces": [
+    $workspaceJsonArray
+  ]
+}
+"@
+    
+    # 5. INITIATE SCAN
+    # ========================================================================
+    
+    Write-Host "Initiating scan..." -ForegroundColor Yellow
+    
+    try {
+        $scanResponse = Invoke-RestMethod -Method Post -Uri $scanUrl -Headers $headers -Body ([System.Text.Encoding]::UTF8.GetBytes($scanBody))
+        $scanId = $scanResponse.id
+        Write-Host "✓ Scan initiated - ID: $scanId" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "✗ Scan initiation failed!" -ForegroundColor Red
+        Write-Host "  Error: $($_.Exception.Message)" -ForegroundColor Red
+        continue  # Skip to next batch
     }
     
-} while ($status.status -ne "Succeeded")
+    # 6. POLL FOR COMPLETION
+    # ========================================================================
+    
+    $statusUrl = "$baseUri/workspaces/scanStatus/$scanId"
+    $maxWaitMinutes = 30
+    $waitSeconds = 10
+    $elapsedSeconds = 0
+    
+    Write-Host "Waiting for scan completion..." -ForegroundColor Yellow
+    
+    do {
+        Start-Sleep -Seconds $waitSeconds
+        $elapsedSeconds += $waitSeconds
+        
+        try {
+            $status = Invoke-RestMethod -Method Get -Uri $statusUrl -Headers $headers
+            Write-Host "  Status: $($status.status) - Elapsed: $([Math]::Round($elapsedSeconds / 60, 1)) min" -ForegroundColor Gray
+        }
+        catch {
+            Write-Host "  Error checking status: $($_.Exception.Message)" -ForegroundColor Red
+            break
+        }
+        
+        if ($elapsedSeconds -ge ($maxWaitMinutes * 60)) {
+            Write-Host "  Timeout after $maxWaitMinutes minutes" -ForegroundColor Red
+            break
+        }
+        
+    } while ($status.status -ne "Succeeded")
+    
+    if ($status.status -ne "Succeeded") {
+        Write-Host "✗ Batch $($batchNum + 1) did not complete successfully (Status: $($status.status))" -ForegroundColor Red
+        continue  # Skip to next batch
+    }
+    
+    # 7. GET SCAN RESULTS
+    # ========================================================================
+    
+    Write-Host "Retrieving results..." -ForegroundColor Yellow
+    
+    try {
+        $resultUrl = "$baseUri/workspaces/scanResult/$scanId"
+        $batchResults = Invoke-RestMethod -Method Get -Uri $resultUrl -Headers $headers
+        
+        # Add to accumulated results
+        $allScanResults += $batchResults.workspaces
+        
+        Write-Host "✓ Batch $($batchNum + 1) complete: $($batchResults.workspaces.Count) workspaces retrieved`n" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "✗ Failed to retrieve results: $($_.Exception.Message)" -ForegroundColor Red
+        continue
+    }
+    
+    # Small delay between batches to avoid rate limiting
+    if ($batchNum -lt ($totalBatches - 1)) {
+        Write-Host "Pausing 5 seconds before next batch...`n" -ForegroundColor Gray
+        Start-Sleep -Seconds 5
+    }
+}
 
-Write-Host "Scan completed successfully!" -ForegroundColor Green
-
-# 4. GET SCAN RESULTS
+# 8. CREATE COMBINED RESULTS OBJECT
 # ============================================================================
 
-$resultUrl = "$baseUri/workspaces/scanResult/$scanId"
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "ALL BATCHES COMPLETE" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Total workspaces retrieved: $($allScanResults.Count) of $($workspaceIds.Count) requested`n" -ForegroundColor Green
 
-Write-Host "Retrieving scan results..." -ForegroundColor Cyan
+$scanResults = [PSCustomObject]@{
+    workspaces = $allScanResults
+}
 
-$scanResults = Invoke-RestMethod -Method Get -Uri $resultUrl -Headers $headers
+# 9. SAVE RAW COMBINED RESULTS
+# ============================================================================
 
-# Save raw results
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $rawOutputPath = "PowerBI_Metadata_Raw_$timestamp.json"
+
+Write-Host "Saving raw results..." -ForegroundColor Cyan
 $scanResults | ConvertTo-Json -Depth 100 | Out-File -FilePath $rawOutputPath -Encoding UTF8
+Write-Host "✓ Raw results saved to: $rawOutputPath`n" -ForegroundColor Green
 
-Write-Host "Raw results saved to: $rawOutputPath" -ForegroundColor Green
-
-# 5. PARSE AND STRUCTURE RESULTS
+# 10. PARSE AND STRUCTURE RESULTS
 # ============================================================================
 
 Write-Host "Parsing and structuring results..." -ForegroundColor Cyan
@@ -181,19 +181,18 @@ $workspaceInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $workspaceInventory | Export-Csv -Path "Workspaces_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ Workspaces exported: $($workspaceInventory.Count)" -ForegroundColor White
 
 # --- DATASETS ---
 $datasetInventory = foreach ($ws in $scanResults.workspaces) {
     foreach ($ds in $ws.datasets) {
         
-        # Parse endorsement
         $endorsement = if ($ds.endorsementDetails) { 
             $ds.endorsementDetails.endorsement 
         } else { 
             "None" 
         }
         
-        # Parse sensitivity label
         $sensitivityLabel = if ($ds.sensitivityLabel) { 
             $ds.sensitivityLabel.labelId 
         } else { 
@@ -221,6 +220,7 @@ $datasetInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $datasetInventory | Export-Csv -Path "Datasets_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ Datasets exported: $($datasetInventory.Count)" -ForegroundColor White
 
 # --- DATA SOURCES ---
 $datasourceInventory = foreach ($ws in $scanResults.workspaces) {
@@ -241,6 +241,7 @@ $datasourceInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $datasourceInventory | Export-Csv -Path "DataSources_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ Data sources exported: $($datasourceInventory.Count)" -ForegroundColor White
 
 # --- DATASET TABLES & COLUMNS ---
 $schemaInventory = foreach ($ws in $scanResults.workspaces) {
@@ -255,7 +256,7 @@ $schemaInventory = foreach ($ws in $scanResults.workspaces) {
                     ColumnName      = $column.name
                     DataType        = $column.dataType
                     IsHidden        = $column.isHidden
-                    ColumnType      = $column.columnType  # Data, Calculated, RowNumber
+                    ColumnType      = $column.columnType
                 }
             }
         }
@@ -263,8 +264,9 @@ $schemaInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $schemaInventory | Export-Csv -Path "DatasetSchema_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ Schema exported: $($schemaInventory.Count) columns" -ForegroundColor White
 
-# --- MEASURES (DAX Expressions) ---
+# --- MEASURES ---
 $measureInventory = foreach ($ws in $scanResults.workspaces) {
     foreach ($ds in $ws.datasets) {
         foreach ($table in $ds.tables) {
@@ -284,6 +286,7 @@ $measureInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $measureInventory | Export-Csv -Path "Measures_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ Measures exported: $($measureInventory.Count)" -ForegroundColor White
 
 # --- REPORTS ---
 $reportInventory = foreach ($ws in $scanResults.workspaces) {
@@ -305,11 +308,11 @@ $reportInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $reportInventory | Export-Csv -Path "Reports_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ Reports exported: $($reportInventory.Count)" -ForegroundColor White
 
-# --- LINEAGE (Dataset Dependencies) ---
+# --- LINEAGE ---
 $lineageInventory = foreach ($ws in $scanResults.workspaces) {
     foreach ($ds in $ws.datasets) {
-        # Upstream dataflows
         foreach ($dataflow in $ds.upstreamDataflows) {
             [PSCustomObject]@{
                 SourceType        = "Dataflow"
@@ -322,7 +325,6 @@ $lineageInventory = foreach ($ws in $scanResults.workspaces) {
             }
         }
         
-        # Upstream datasets (composite models)
         foreach ($upstreamDs in $ds.upstreamDatasets) {
             [PSCustomObject]@{
                 SourceType        = "Dataset"
@@ -338,8 +340,9 @@ $lineageInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $lineageInventory | Export-Csv -Path "Lineage_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ Lineage exported: $($lineageInventory.Count) relationships" -ForegroundColor White
 
-# --- USER ACCESS (if getArtifactUsers=True) ---
+# --- USER ACCESS ---
 $userAccessInventory = foreach ($ws in $scanResults.workspaces) {
     foreach ($ds in $ws.datasets) {
         foreach ($user in $ds.users) {
@@ -371,20 +374,22 @@ $userAccessInventory = foreach ($ws in $scanResults.workspaces) {
 }
 
 $userAccessInventory | Export-Csv -Path "UserAccess_$timestamp.csv" -NoTypeInformation
+Write-Host "✓ User access exported: $($userAccessInventory.Count) permissions" -ForegroundColor White
 
-# 6. SUMMARY REPORT
+# 11. FINAL SUMMARY
 # ============================================================================
 
 Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "SCAN COMPLETE - SUMMARY" -ForegroundColor Cyan
+Write-Host "EXPORT COMPLETE - SUMMARY" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Total Workspaces:   $($workspaceInventory.Count)" -ForegroundColor White
 Write-Host "Total Datasets:     $($datasetInventory.Count)" -ForegroundColor White
 Write-Host "Total Reports:      $($reportInventory.Count)" -ForegroundColor White
 Write-Host "Total Data Sources: $($datasourceInventory.Count)" -ForegroundColor White
 Write-Host "Total Measures:     $($measureInventory.Count)" -ForegroundColor White
+Write-Host "Total Lineage:      $($lineageInventory.Count)" -ForegroundColor White
 Write-Host "`nFiles created:" -ForegroundColor Cyan
-Write-Host "  - $rawOutputPath (raw JSON)" -ForegroundColor White
+Write-Host "  - $rawOutputPath" -ForegroundColor White
 Write-Host "  - Workspaces_$timestamp.csv" -ForegroundColor White
 Write-Host "  - Datasets_$timestamp.csv" -ForegroundColor White
 Write-Host "  - DataSources_$timestamp.csv" -ForegroundColor White
@@ -393,33 +398,37 @@ Write-Host "  - Measures_$timestamp.csv" -ForegroundColor White
 Write-Host "  - Reports_$timestamp.csv" -ForegroundColor White
 Write-Host "  - Lineage_$timestamp.csv" -ForegroundColor White
 Write-Host "  - UserAccess_$timestamp.csv" -ForegroundColor White
+Write-Host "`n✓ All done!" -ForegroundColor Green
+
+
+<#
 ```
 
-## Key Points Explained
+## Key Features of This Batched Version
 
-### **Token Acquisition**
-- **Method A (Interactive)**: Uses `Connect-PowerBIServiceAccount` - simplest for ad-hoc runs
-- **Method B (Service Principal)**: For scheduled automation - requires Azure AD app registration
+1. **Automatic Batching**: Splits all workspaces into groups of 100
+2. **Progress Tracking**: Shows which batch is processing (e.g., "BATCH 3 of 15")
+3. **Error Resilience**: If one batch fails, continues with the next
+4. **Combined Results**: Merges all batches into single output files
+5. **Rate Limit Protection**: 5-second pause between batches
+6. **Detailed Logging**: Shows status for each batch
 
-### **URI Personalization**
-- **NO personalization needed** - the URI is a standard Microsoft endpoint
-- The only variable is `$scanId` which is returned by the API itself
-- Your tenant context is determined by the authentication token
+## Expected Output
 
-### **Scan Results Structure**
-
-The JSON response has this hierarchy:
+For a tenant with 450 workspaces, you'll see:
 ```
-workspaces[]
-├── id, name, type, state, capacityId
-├── datasets[]
-│   ├── id, name, tables[], measures[], datasources[]
-│   ├── endorsementDetails
-│   ├── sensitivityLabel
-│   └── upstreamDataflows[], upstreamDatasets[]
-├── reports[]
-│   ├── id, name, datasetId, users[]
-│   └── endorsementDetails
-├── dashboards[]
-├── dataflows[]
-└── workbooks[]
+Found 450 total workspaces
+Will process 5 batches of up to 100 workspaces each
+
+========================================
+BATCH 1 of 5
+========================================
+Workspaces: 100 (indices 0 to 99)
+Initiating scan...
+✓ Scan initiated - ID: abc123...
+...
+✓ Batch 1 complete: 100 workspaces retrieved
+
+[repeats for batches 2-5]
+
+#>
