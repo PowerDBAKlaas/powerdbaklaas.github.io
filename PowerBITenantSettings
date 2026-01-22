@@ -1,0 +1,413 @@
+<#
+Created by claude AI
+to be reviewed!
+#>
+
+# ============================================================================
+# Power BI Tenant Settings Inventory
+# ============================================================================
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "POWER BI TENANT SETTINGS EXPORT" -ForegroundColor Cyan
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+# Connect
+Connect-PowerBIServiceAccount
+$token = (Get-PowerBIAccessToken)["Authorization"].Replace("Bearer ", "")
+
+$headers = @{
+    'Authorization' = $token
+    'Content-Type'  = 'application/json'
+}
+
+# Get all tenant settings
+Write-Host "Retrieving tenant settings..." -ForegroundColor Yellow
+
+try {
+    $response = Invoke-RestMethod -Uri "https://api.powerbi.com/v1.0/myorg/admin/tenantsettings" -Headers $headers -Method Get
+    Write-Host "✓ Retrieved $($response.tenantSettings.Count) settings`n" -ForegroundColor Green
+}
+catch {
+    Write-Host "✗ Failed to retrieve settings: $($_.Exception.Message)" -ForegroundColor Red
+    exit
+}
+
+# ============================================================================
+# PARSE AND STRUCTURE SETTINGS
+# ============================================================================
+
+$allSettings = foreach ($setting in $response.tenantSettings) {
+    
+    # Determine who can use this setting
+    $enabledFor = if ($setting.enabled -eq $true) {
+        if ($setting.canSpecifySecurityGroups -eq $true) {
+            if ($setting.tenantSettingGroup) {
+                # Has specific groups
+                $groupNames = ($setting.tenantSettingGroup | ForEach-Object { $_.groupName }) -join "; "
+                "Specific Groups: $groupNames"
+            }
+            elseif ($setting.excludedSecurityGroups) {
+                # Excluded groups (enabled for all EXCEPT these)
+                $excludedNames = ($setting.excludedSecurityGroups | ForEach-Object { $_.groupName }) -join "; "
+                "All Users (except: $excludedNames)"
+            }
+            else {
+                "Entire Organization"
+            }
+        }
+        else {
+            "Entire Organization"
+        }
+    }
+    elseif ($setting.enabled -eq $false) {
+        "Disabled"
+    }
+    else {
+        "Not Configured"
+    }
+    
+    # Get delegated tenant setting groups if applicable
+    $delegatedTo = if ($setting.delegatedToUsers) {
+        ($setting.delegatedToUsers | ForEach-Object { $_.groupName }) -join "; "
+    }
+    else {
+        "N/A"
+    }
+    
+    # Additional properties (some settings have extra config)
+    $properties = if ($setting.properties) {
+        ($setting.properties | ForEach-Object { "$($_.name): $($_.value)" }) -join "; "
+    }
+    else {
+        ""
+    }
+    
+    [PSCustomObject]@{
+        SettingName              = $setting.settingName
+        Title                    = $setting.title
+        Enabled                  = $setting.enabled
+        EnabledFor               = $enabledFor
+        CanSpecifySecurityGroups = $setting.canSpecifySecurityGroups
+        DelegatedToUsers         = $delegatedTo
+        Category                 = Get-SettingCategory -settingName $setting.settingName
+        AdditionalProperties     = $properties
+    }
+}
+
+# ============================================================================
+# EXPORT TO CSV
+# ============================================================================
+
+$csvPath = "PowerBI_TenantSettings_$timestamp.csv"
+$allSettings | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+
+Write-Host "✓ Settings exported to: $csvPath`n" -ForegroundColor Green
+
+# ============================================================================
+# CREATE SUMMARY REPORT
+# ============================================================================
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "TENANT SETTINGS SUMMARY" -ForegroundColor Cyan
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+# Group by category
+$categorized = $allSettings | Group-Object Category
+
+foreach ($category in ($categorized | Sort-Object Name)) {
+    Write-Host "$($category.Name) ($($category.Count) settings)" -ForegroundColor Yellow
+    
+    $enabled = ($category.Group | Where-Object { $_.Enabled -eq $true }).Count
+    $disabled = ($category.Group | Where-Object { $_.Enabled -eq $false }).Count
+    
+    Write-Host "  Enabled: $enabled | Disabled: $disabled`n" -ForegroundColor White
+}
+
+# ============================================================================
+# SECURITY-CRITICAL SETTINGS CHECK
+# ============================================================================
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "SECURITY & GOVERNANCE CHECKS" -ForegroundColor Cyan
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+# Define critical settings to check
+$criticalChecks = @(
+    @{
+        Name = "Service principals can access read-only admin APIs"
+        Setting = "ServicePrincipalAccess"
+        Recommendation = "Enable for automation"
+        Status = $null
+    },
+    @{
+        Name = "Allow service principals to use Power BI APIs"
+        Setting = "ServicePrincipalAccess"
+        Recommendation = "Enable with security group restriction"
+        Status = $null
+    },
+    @{
+        Name = "Publish to web"
+        Setting = "PublishToWeb"
+        Recommendation = "Disable (public internet risk)"
+        Status = $null
+    },
+    @{
+        Name = "Export to Excel"
+        Setting = "ExportToExcel"
+        Recommendation = "Enable (common requirement)"
+        Status = $null
+    },
+    @{
+        Name = "Export reports as PowerPoint or PDF"
+        Setting = "ExportReport"
+        Recommendation = "Enable"
+        Status = $null
+    },
+    @{
+        Name = "External data sharing"
+        Setting = "ShareToEntireOrganization"
+        Recommendation = "Review carefully"
+        Status = $null
+    },
+    @{
+        Name = "Guest users can access Power BI"
+        Setting = "AADSSOEnabled"
+        Recommendation = "Review based on security policy"
+        Status = $null
+    },
+    @{
+        Name = "Users can see sensitivity labels"
+        Setting = "InformationProtection"
+        Recommendation = "Enable for compliance"
+        Status = $null
+    }
+)
+
+# Check each critical setting
+foreach ($check in $criticalChecks) {
+    $setting = $allSettings | Where-Object { $_.SettingName -like "*$($check.Setting)*" -or $_.Title -like "*$($check.Name)*" } | Select-Object -First 1
+    
+    if ($setting) {
+        $status = if ($setting.Enabled) { "ENABLED" } else { "DISABLED" }
+        $color = if ($setting.Enabled) { "Green" } else { "Red" }
+        
+        Write-Host "$($check.Name):" -ForegroundColor White
+        Write-Host "  Status: $status" -ForegroundColor $color
+        Write-Host "  Current: $($setting.EnabledFor)" -ForegroundColor Gray
+        Write-Host "  Recommendation: $($check.Recommendation)`n" -ForegroundColor Cyan
+    }
+}
+
+# ============================================================================
+# RISKY SETTINGS ALERT
+# ============================================================================
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "RISKY SETTINGS ENABLED" -ForegroundColor Cyan
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+$riskySettings = @(
+    "PublishToWeb",
+    "ExportToCsv",
+    "ShareLinkToEntireOrganization",
+    "AllowExternalDataSharingReceivers"
+)
+
+$riskyFound = $allSettings | Where-Object { 
+    $_.Enabled -eq $true -and 
+    ($riskySettings | Where-Object { $_.SettingName -like "*$_*" })
+}
+
+if ($riskyFound) {
+    foreach ($setting in $riskyFound) {
+        Write-Host "⚠️  $($setting.Title)" -ForegroundColor Yellow
+        Write-Host "   Enabled for: $($setting.EnabledFor)" -ForegroundColor White
+        Write-Host "   Risk: Public data exposure or unauthorized sharing`n" -ForegroundColor Red
+    }
+}
+else {
+    Write-Host "✓ No high-risk settings enabled for entire organization`n" -ForegroundColor Green
+}
+
+# ============================================================================
+# ADMIN API SETTINGS (for your metadata scanning)
+# ============================================================================
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "ADMIN API SETTINGS (Metadata Scanning)" -ForegroundColor Cyan
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+$adminApiSettings = $allSettings | Where-Object { 
+    $_.SettingName -like "*Admin*" -or 
+    $_.SettingName -like "*Metadata*" -or
+    $_.Title -like "*admin API*"
+}
+
+if ($adminApiSettings) {
+    foreach ($setting in $adminApiSettings) {
+        $color = if ($setting.Enabled) { "Green" } else { "Yellow" }
+        Write-Host "$($setting.Title)" -ForegroundColor White
+        Write-Host "  Status: $(if ($setting.Enabled) { 'ENABLED ✓' } else { 'DISABLED ⚠️' })" -ForegroundColor $color
+        Write-Host "  Enabled for: $($setting.EnabledFor)`n" -ForegroundColor Gray
+    }
+}
+
+# ============================================================================
+# CREATE HTML REPORT (OPTIONAL)
+# ============================================================================
+
+$htmlPath = "PowerBI_TenantSettings_Report_$timestamp.html"
+
+$settingsTable = ($allSettings | ForEach-Object {
+    $statusColor = if ($_.Enabled) { "#28a745" } else { "#dc3545" }
+    $statusText = if ($_.Enabled) { "ENABLED" } else { "DISABLED" }
+    
+    "<tr>
+        <td>$($_.Title)</td>
+        <td><span style='background: $statusColor; color: white; padding: 4px 12px; border-radius: 12px; font-weight: 600;'>$statusText</span></td>
+        <td>$($_.EnabledFor)</td>
+        <td style='font-size: 0.85em; color: #666;'>$($_.SettingName)</td>
+    </tr>"
+}) -join "`n"
+
+$html = @"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Power BI Tenant Settings - $(Get-Date -Format 'yyyy-MM-dd')</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background: #f5f5f5; }
+        h1 { color: #667eea; }
+        table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        th { background: #667eea; color: white; padding: 12px; text-align: left; }
+        td { padding: 10px; border-bottom: 1px solid #e0e0e0; }
+        tr:hover { background: #f8f9fa; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Power BI Tenant Settings</h1>
+        <p>Generated: $(Get-Date -Format 'MMMM dd, yyyy HH:mm')</p>
+        <p>Total Settings: $($allSettings.Count)</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Setting</th>
+                    <th>Status</th>
+                    <th>Enabled For</th>
+                    <th>Setting Name</th>
+                </tr>
+            </thead>
+            <tbody>
+                $settingsTable
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+"@
+
+$html | Out-File -FilePath $htmlPath -Encoding UTF8
+
+Write-Host "`n✓ HTML report generated: $htmlPath" -ForegroundColor Green
+Write-Host "`nOpening report..." -ForegroundColor Cyan
+Start-Process $htmlPath
+
+# ============================================================================
+# HELPER FUNCTION - Categorize Settings
+# ============================================================================
+
+function Get-SettingCategory {
+    param([string]$settingName)
+    
+    switch -Wildcard ($settingName) {
+        "*Export*" { "Export & Sharing" }
+        "*Share*" { "Export & Sharing" }
+        "*Publish*" { "Export & Sharing" }
+        "*Admin*" { "Admin & API" }
+        "*API*" { "Admin & API" }
+        "*ServicePrincipal*" { "Admin & API" }
+        "*Metadata*" { "Admin & API" }
+        "*Workspace*" { "Workspace Management" }
+        "*Capacity*" { "Capacity & Performance" }
+        "*Dataflow*" { "Dataflows & Datasets" }
+        "*Dataset*" { "Dataflows & Datasets" }
+        "*Template*" { "Development" }
+        "*CustomVisual*" { "Development" }
+        "*RScript*" { "Development" }
+        "*Python*" { "Development" }
+        "*Email*" { "Notifications" }
+        "*Subscription*" { "Notifications" }
+        "*Guest*" { "Security & Access" }
+        "*External*" { "Security & Access" }
+        "*B2B*" { "Security & Access" }
+        "*InformationProtection*" { "Security & Access" }
+        "*Sensitivity*" { "Security & Access" }
+        "*Certification*" { "Governance" }
+        "*Endorsement*" { "Governance" }
+        "*Discovery*" { "Governance" }
+        default { "Other" }
+    }
+}
+
+Write-Host "`n✓ Tenant settings inventory complete!" -ForegroundColor Green
+Write-Host "`nFiles created:" -ForegroundColor Cyan
+Write-Host "  - $csvPath (CSV)" -ForegroundColor White
+Write-Host "  - $htmlPath (HTML Report)" -ForegroundColor White
+<#
+```
+
+## What This Script Does
+
+### **Outputs:**
+1. **CSV File** - Complete list of all settings (machine-readable)
+2. **HTML Report** - Clean, filterable table view
+3. **Console Summary** - Categorized overview with counts
+
+### **Key Features:**
+
+✅ **Cleaner than Lorian's tool** - Focused on what you need  
+✅ **Security checks** - Highlights risky settings  
+✅ **Admin API verification** - Shows settings needed for metadata scanning  
+✅ **Categorized** - Groups settings by function  
+✅ **Who can use it** - Shows if enabled for everyone vs. specific groups  
+
+## CSV Output Columns
+
+| Column | Description |
+|--------|-------------|
+| **SettingName** | Technical name (e.g., `PublishToWebEnabled`) |
+| **Title** | Human-readable name |
+| **Enabled** | True/False |
+| **EnabledFor** | "Entire Organization", "Specific Groups: Sales, Finance", or "Disabled" |
+| **CanSpecifySecurityGroups** | Whether you can restrict to specific groups |
+| **DelegatedToUsers** | If delegated, which groups |
+| **Category** | Export & Sharing, Admin & API, Security, etc. |
+| **AdditionalProperties** | Extra configuration details |
+
+## Example Output
+```
+========================================
+SECURITY & GOVERNANCE CHECKS
+========================================
+
+Publish to web:
+  Status: DISABLED
+  Current: Disabled
+  Recommendation: Disable (public internet risk)
+
+Service principals can access read-only admin APIs:
+  Status: ENABLED
+  Current: Specific Groups: BI_Automation
+  Recommendation: Enable for automation
+
+Users can see sensitivity labels:
+  Status: ENABLED
+  Current: Entire Organization
+  Recommendation: Enable for compliance
+#>
