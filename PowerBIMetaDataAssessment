@@ -1,0 +1,328 @@
+<#
+created by Claude AI!
+to be reviewed!!!
+#>
+
+# ============================================================================
+# Power BI Governance & Data Quality Assessment
+# ============================================================================
+
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+
+# Import your scan results
+$workspaces = Import-Csv "Workspaces_*.csv"
+$datasets = Import-Csv "Datasets_*.csv"
+$reports = Import-Csv "Reports_*.csv"
+$datasources = Import-Csv "DataSources_*.csv"
+$measures = Import-Csv "Measures_*.csv"
+$lineage = Import-Csv "Lineage_*.csv"
+$userAccess = Import-Csv "UserAccess_*.csv"
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "GOVERNANCE ASSESSMENT" -ForegroundColor Cyan
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+# ============================================================================
+# 1. ENDORSEMENT ANALYSIS
+# ============================================================================
+
+Write-Host "1. ENDORSEMENT STATUS" -ForegroundColor Yellow
+Write-Host "   (Certified/Promoted datasets are trusted for reuse)`n" -ForegroundColor Gray
+
+$endorsementBreakdown = $datasets | Group-Object Endorsement | Select-Object Name, Count
+$endorsementBreakdown | Format-Table -AutoSize
+
+$unendorsed = $datasets | Where-Object { $_.Endorsement -eq "None" }
+$certifiedCount = ($datasets | Where-Object { $_.Endorsement -eq "Certified" }).Count
+$promotedCount = ($datasets | Where-Object { $_.Endorsement -eq "Promoted" }).Count
+
+Write-Host "   ⚠️  Unendorsed datasets: $($unendorsed.Count) ($([Math]::Round(($unendorsed.Count / $datasets.Count) * 100, 1))%)" -ForegroundColor $(if ($unendorsed.Count -gt ($datasets.Count * 0.8)) { "Red" } else { "Yellow" })
+Write-Host "   ✓  Certified datasets: $certifiedCount" -ForegroundColor Green
+Write-Host "   ℹ️  Promoted datasets: $promotedCount`n" -ForegroundColor Cyan
+
+# Export high-priority unendorsed datasets for review
+$unendorsed | 
+    Select-Object WorkspaceName, DatasetName, ConfiguredBy, CreatedDate |
+    Export-Csv "Datasets_Unendorsed_$timestamp.csv" -NoTypeInformation
+
+# ============================================================================
+# 2. SENSITIVITY LABELS
+# ============================================================================
+
+Write-Host "2. SENSITIVITY LABELS" -ForegroundColor Yellow
+Write-Host "   (Data classification for compliance)`n" -ForegroundColor Gray
+
+$labelBreakdown = $datasets | Group-Object SensitivityLabel | Select-Object Name, Count
+$labelBreakdown | Format-Table -AutoSize
+
+$unlabeled = $datasets | Where-Object { $_.SensitivityLabel -eq "None" }
+Write-Host "   ⚠️  Unlabeled datasets: $($unlabeled.Count) ($([Math]::Round(($unlabeled.Count / $datasets.Count) * 100, 1))%)`n" -ForegroundColor $(if ($unlabeled.Count -gt ($datasets.Count * 0.7)) { "Red" } else { "Yellow" })
+
+$unlabeled | 
+    Select-Object WorkspaceName, DatasetName, ConfiguredBy |
+    Export-Csv "Datasets_NoSensitivityLabel_$timestamp.csv" -NoTypeInformation
+
+# ============================================================================
+# 3. ORPHANED CONTENT
+# ============================================================================
+
+Write-Host "3. ORPHANED CONTENT" -ForegroundColor Yellow
+Write-Host "   (Reports without datasets, datasets without sources)`n" -ForegroundColor Gray
+
+# Reports pointing to non-existent datasets
+$datasetIds = $datasets | Select-Object -ExpandProperty DatasetId
+$orphanedReports = $reports | Where-Object { 
+    $_.DatasetId -and $datasetIds -notcontains $_.DatasetId 
+}
+
+Write-Host "   ⚠️  Orphaned reports (dataset missing): $($orphanedReports.Count)" -ForegroundColor Red
+
+if ($orphanedReports) {
+    $orphanedReports | 
+        Select-Object WorkspaceName, ReportName, DatasetId, ModifiedDate |
+        Export-Csv "Reports_Orphaned_$timestamp.csv" -NoTypeInformation
+}
+
+# Datasets without data sources (suspicious)
+$datasetIdsWithSources = $datasources | Select-Object -ExpandProperty DatasetId -Unique
+$datasetsNoSources = $datasets | Where-Object { 
+    $datasetIdsWithSources -notcontains $_.DatasetId -and $_.ContentProviderType -ne "PbixInImportMode"
+}
+
+Write-Host "   ⚠️  Datasets without data sources: $($datasetsNoSources.Count)`n" -ForegroundColor Yellow
+
+if ($datasetsNoSources) {
+    $datasetsNoSources | 
+        Select-Object WorkspaceName, DatasetName, ContentProviderType |
+        Export-Csv "Datasets_NoDataSources_$timestamp.csv" -NoTypeInformation
+}
+
+# ============================================================================
+# 4. GATEWAY DEPENDENCIES
+# ============================================================================
+
+Write-Host "4. ON-PREMISES GATEWAY USAGE" -ForegroundColor Yellow
+Write-Host "   (Datasets requiring gateway for refresh)`n" -ForegroundColor Gray
+
+$gatewayDatasets = $datasets | Where-Object { $_.IsOnPremGatewayRequired -eq "True" }
+$gatewayBreakdown = $datasources | Where-Object { $_.GatewayId } | 
+    Group-Object GatewayId | 
+    Select-Object Name, Count | 
+    Sort-Object Count -Descending
+
+Write-Host "   Gateway-dependent datasets: $($gatewayDatasets.Count)" -ForegroundColor White
+Write-Host "   Unique gateways in use: $($gatewayBreakdown.Count)`n" -ForegroundColor White
+
+if ($gatewayBreakdown.Count -gt 0) {
+    Write-Host "   Top 5 gateways by dataset count:" -ForegroundColor Gray
+    $gatewayBreakdown | Select-Object -First 5 | Format-Table -AutoSize
+}
+
+$gatewayDatasets | 
+    Select-Object WorkspaceName, DatasetName, IsRefreshable |
+    Export-Csv "Datasets_GatewayDependent_$timestamp.csv" -NoTypeInformation
+
+# ============================================================================
+# 5. DATA SOURCE ANALYSIS
+# ============================================================================
+
+Write-Host "5. DATA SOURCE TYPES" -ForegroundColor Yellow
+Write-Host "   (Where data comes from)`n" -ForegroundColor Gray
+
+$sourceTypeBreakdown = $datasources | 
+    Group-Object DatasourceType | 
+    Select-Object Name, Count | 
+    Sort-Object Count -Descending
+
+$sourceTypeBreakdown | Select-Object -First 10 | Format-Table -AutoSize
+
+# Identify datasets using deprecated/risky sources
+$riskySourceTypes = @("File", "Folder", "SharePoint.Files", "Excel.Workbook")
+$riskyDatasets = $datasources | Where-Object { $riskySourceTypes -contains $_.DatasourceType } |
+    Select-Object WorkspaceName, DatasetName, DatasourceType, ConnectionDetails -Unique
+
+if ($riskyDatasets) {
+    Write-Host "   ⚠️  Datasets using file-based sources: $($riskyDatasets.Count)" -ForegroundColor Yellow
+    Write-Host "   (Consider migrating to database/dataflow sources)`n" -ForegroundColor Gray
+    
+    $riskyDatasets | Export-Csv "Datasets_FileBasedSources_$timestamp.csv" -NoTypeInformation
+}
+
+# ============================================================================
+# 6. WORKSPACE HEALTH
+# ============================================================================
+
+Write-Host "6. WORKSPACE HEALTH" -ForegroundColor Yellow
+Write-Host "   (Capacity, state, activity)`n" -ForegroundColor Gray
+
+# Workspaces on shared capacity (not Premium/Fabric)
+$sharedCapacity = $workspaces | Where-Object { 
+    $_.CapacityId -eq "" -or $_.CapacityId -eq $null 
+}
+
+Write-Host "   Workspaces on Shared Capacity: $($sharedCapacity.Count)" -ForegroundColor White
+Write-Host "   Workspaces on Premium/Fabric: $($workspaces.Count - $sharedCapacity.Count)" -ForegroundColor White
+
+# Workspace state issues
+$inactiveWorkspaces = $workspaces | Where-Object { $_.State -ne "Active" }
+if ($inactiveWorkspaces) {
+    Write-Host "   ⚠️  Inactive workspaces: $($inactiveWorkspaces.Count)" -ForegroundColor Red
+    $inactiveWorkspaces | Format-Table WorkspaceName, State, Type -AutoSize
+}
+
+# Empty or near-empty workspaces
+$emptyWorkspaces = $workspaces | Where-Object { 
+    $_.DatasetCount -eq 0 -and $_.ReportCount -eq 0 -and $_.DashboardCount -eq 0 
+}
+
+Write-Host "`n   Empty workspaces (candidates for deletion): $($emptyWorkspaces.Count)" -ForegroundColor Yellow
+
+$emptyWorkspaces | 
+    Select-Object WorkspaceName, Type, State |
+    Export-Csv "Workspaces_Empty_$timestamp.csv" -NoTypeInformation
+
+# ============================================================================
+# 7. REFRESH CONFIGURATION
+# ============================================================================
+
+Write-Host "`n7. REFRESH CONFIGURATION" -ForegroundColor Yellow
+Write-Host "   (Import datasets that should refresh)`n" -ForegroundColor Gray
+
+$refreshableDatasets = $datasets | Where-Object { $_.IsRefreshable -eq "True" }
+$nonRefreshable = $datasets | Where-Object { $_.IsRefreshable -eq "False" }
+
+Write-Host "   Refreshable datasets: $($refreshableDatasets.Count)" -ForegroundColor Green
+Write-Host "   Non-refreshable datasets: $($nonRefreshable.Count)" -ForegroundColor White
+
+# Note: Actual refresh schedules require separate API call (see next script)
+
+# ============================================================================
+# 8. ROW-LEVEL SECURITY (RLS)
+# ============================================================================
+
+Write-Host "`n8. ROW-LEVEL SECURITY" -ForegroundColor Yellow
+Write-Host "   (Datasets requiring RLS/effective identity)`n" -ForegroundColor Gray
+
+$rlsDatasets = $datasets | Where-Object { $_.IsEffectiveIdentityRequired -eq "True" }
+
+Write-Host "   Datasets with RLS: $($rlsDatasets.Count)" -ForegroundColor White
+
+if ($rlsDatasets) {
+    $rlsDatasets | 
+        Select-Object WorkspaceName, DatasetName, ConfiguredBy |
+        Export-Csv "Datasets_WithRLS_$timestamp.csv" -NoTypeInformation
+}
+
+# ============================================================================
+# 9. DATASET REUSE & DUPLICATION
+# ============================================================================
+
+Write-Host "`n9. DATASET REUSE ANALYSIS" -ForegroundColor Yellow
+Write-Host "   (Identify duplication opportunities)`n" -ForegroundColor Gray
+
+# Datasets used by multiple reports (good reuse)
+$datasetUsage = $reports | Group-Object DatasetId | 
+    Select-Object Name, Count | 
+    Sort-Object Count -Descending
+
+$wellReusedDatasets = $datasetUsage | Where-Object { $_.Count -ge 3 }
+$singleUseDatasets = $datasetUsage | Where-Object { $_.Count -eq 1 }
+
+Write-Host "   Datasets used by 3+ reports: $($wellReusedDatasets.Count) ✓" -ForegroundColor Green
+Write-Host "   Datasets used by 1 report only: $($singleUseDatasets.Count)" -ForegroundColor Yellow
+Write-Host "   (Single-use datasets may indicate duplication)`n" -ForegroundColor Gray
+
+# Potential duplicates (same name, different workspace)
+$potentialDuplicates = $datasets | 
+    Group-Object DatasetName | 
+    Where-Object { $_.Count -gt 1 } |
+    Select-Object Name, Count |
+    Sort-Object Count -Descending
+
+if ($potentialDuplicates) {
+    Write-Host "   ⚠️  Datasets with duplicate names: $($potentialDuplicates.Count)" -ForegroundColor Yellow
+    $potentialDuplicates | Select-Object -First 10 | Format-Table -AutoSize
+    
+    # Export detailed duplicate analysis
+    $duplicateDetails = foreach ($dup in $potentialDuplicates) {
+        $datasets | Where-Object { $_.DatasetName -eq $dup.Name } |
+            Select-Object WorkspaceName, DatasetName, ConfiguredBy, CreatedDate
+    }
+    $duplicateDetails | Export-Csv "Datasets_PotentialDuplicates_$timestamp.csv" -NoTypeInformation
+}
+
+# ============================================================================
+# 10. CONTENT OWNERSHIP
+# ============================================================================
+
+Write-Host "`n10. CONTENT OWNERSHIP" -ForegroundColor Yellow
+Write-Host "    (Owner distribution and risk)`n" -ForegroundColor Gray
+
+$ownerBreakdown = $datasets | 
+    Group-Object ConfiguredBy | 
+    Select-Object Name, Count | 
+    Sort-Object Count -Descending
+
+Write-Host "   Top 10 dataset owners:" -ForegroundColor Gray
+$ownerBreakdown | Select-Object -First 10 | Format-Table -AutoSize
+
+# Single point of failure (one person owns many datasets)
+$singlePointOfFailure = $ownerBreakdown | Where-Object { $_.Count -gt 10 }
+
+if ($singlePointOfFailure) {
+    Write-Host "   ⚠️  Owners with 10+ datasets: $($singlePointOfFailure.Count)" -ForegroundColor Red
+    Write-Host "   (Consider distributing ownership or documenting dependencies)`n" -ForegroundColor Gray
+}
+
+# ============================================================================
+# SUMMARY SCORECARD
+# ============================================================================
+
+Write-Host "`n========================================" -ForegroundColor Cyan
+Write-Host "GOVERNANCE SCORECARD" -ForegroundColor Cyan
+Write-Host "========================================`n" -ForegroundColor Cyan
+
+$score = 0
+$maxScore = 10
+
+# Scoring criteria
+if (($unendorsed.Count / $datasets.Count) -lt 0.5) { $score++ }
+if (($unlabeled.Count / $datasets.Count) -lt 0.3) { $score++ }
+if ($orphanedReports.Count -eq 0) { $score++ }
+if ($emptyWorkspaces.Count -lt ($workspaces.Count * 0.1)) { $score++ }
+if (($sharedCapacity.Count / $workspaces.Count) -lt 0.5) { $score++ }
+if ($inactiveWorkspaces.Count -eq 0) { $score++ }
+if (($wellReusedDatasets.Count / $datasets.Count) -gt 0.2) { $score++ }
+if (($singlePointOfFailure.Count / $ownerBreakdown.Count) -lt 0.2) { $score++ }
+if ($riskyDatasets.Count -lt ($datasets.Count * 0.2)) { $score++ }
+if (($refreshableDatasets.Count / $datasets.Count) -gt 0.5) { $score++ }
+
+$percentage = ($score / $maxScore) * 100
+$grade = switch ($percentage) {
+    {$_ -ge 90} { "A - Excellent"; "Green" }
+    {$_ -ge 70} { "B - Good"; "Cyan" }
+    {$_ -ge 50} { "C - Fair"; "Yellow" }
+    default { "D - Needs Improvement"; "Red" }
+}
+
+Write-Host "Overall Governance Score: $score / $maxScore ($percentage%)" -ForegroundColor White
+Write-Host "Grade: $($grade[0])`n" -ForegroundColor $grade[1]
+
+Write-Host "Key Priorities:" -ForegroundColor Yellow
+if ($unendorsed.Count -gt ($datasets.Count * 0.7)) {
+    Write-Host "  1. Implement dataset endorsement process" -ForegroundColor Red
+}
+if ($unlabeled.Count -gt ($datasets.Count * 0.5)) {
+    Write-Host "  2. Apply sensitivity labels for compliance" -ForegroundColor Red
+}
+if ($orphanedReports.Count -gt 0) {
+    Write-Host "  3. Clean up orphaned reports" -ForegroundColor Red
+}
+if ($emptyWorkspaces.Count -gt 5) {
+    Write-Host "  4. Archive or delete empty workspaces" -ForegroundColor Yellow
+}
+if ($potentialDuplicates.Count -gt 10) {
+    Write-Host "  5. Consolidate duplicate datasets" -ForegroundColor Yellow
+}
+
+Write-Host "`n✓ Assessment complete! Review exported CSV files for details." -ForegroundColor Green
