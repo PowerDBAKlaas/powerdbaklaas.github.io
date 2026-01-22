@@ -4,7 +4,7 @@ to be reviewed!!!
 #>
 
 # ============================================================================
-# Power BI Governance Assessment - COMPREHENSIVE HTML REPORT
+# Power BI Governance Assessment - COMPREHENSIVE HTML REPORT (FIXED)
 # ============================================================================
 
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -144,10 +144,13 @@ $gradeInfo = switch ($percentage) {
 }
 
 # ============================================================================
-# BUILD HTML REPORT
+# BUILD HTML REPORT USING STRING BUILDER
 # ============================================================================
 
-$html = @"
+$sb = New-Object System.Text.StringBuilder
+
+# Add CSS and header
+[void]$sb.AppendLine(@"
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -155,252 +158,43 @@ $html = @"
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Power BI Governance Assessment - $reportDate</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            color: #333;
-            line-height: 1.6;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        
-        header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        
-        header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-        
-        .scorecard {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        
-        .score-display {
-            font-size: 4em;
-            font-weight: bold;
-            color: $($gradeInfo.Color);
-            margin: 20px 0;
-        }
-        
-        .grade-label {
-            font-size: 1.5em;
-            color: #666;
-            margin-bottom: 10px;
-        }
-        
-        .section {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .section h2 {
-            color: #667eea;
-            border-bottom: 3px solid #667eea;
-            padding-bottom: 10px;
-            margin-bottom: 20px;
-            font-size: 1.8em;
-        }
-        
-        .section h3 {
-            color: #764ba2;
-            margin-top: 25px;
-            margin-bottom: 15px;
-            font-size: 1.3em;
-        }
-        
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-        }
-        
-        th {
-            background: #667eea;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-        }
-        
-        td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        
-        tr:hover {
-            background: #f8f9fa;
-        }
-        
-        .metric-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
-        }
-        
-        .metric-card {
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #667eea;
-        }
-        
-        .metric-card h4 {
-            color: #555;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .metric-card .value {
-            font-size: 2em;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .metric-card .subvalue {
-            color: #666;
-            font-size: 0.9em;
-            margin-top: 5px;
-        }
-        
-        .alert {
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin: 15px 0;
-            border-left: 4px solid;
-        }
-        
-        .alert-danger {
-            background: #f8d7da;
-            border-color: #dc3545;
-            color: #721c24;
-        }
-        
-        .alert-warning {
-            background: #fff3cd;
-            border-color: #ffc107;
-            color: #856404;
-        }
-        
-        .alert-success {
-            background: #d4edda;
-            border-color: #28a745;
-            color: #155724;
-        }
-        
-        .alert-info {
-            background: #d1ecf1;
-            border-color: #17a2b8;
-            color: #0c5460;
-        }
-        
-        .priority-list {
-            list-style: none;
-            counter-reset: priority-counter;
-        }
-        
-        .priority-list li {
-            counter-increment: priority-counter;
-            padding: 15px;
-            margin: 10px 0;
-            background: #f8f9fa;
-            border-radius: 5px;
-            border-left: 4px solid #667eea;
-        }
-        
-        .priority-list li::before {
-            content: counter(priority-counter);
-            background: #667eea;
-            color: white;
-            font-weight: bold;
-            padding: 5px 12px;
-            border-radius: 50%;
-            margin-right: 15px;
-        }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
-        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        header h1 { font-size: 2.5em; margin-bottom: 10px; }
+        header p { font-size: 1.1em; opacity: 0.9; }
+        .scorecard { background: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); text-align: center; }
+        .score-display { font-size: 4em; font-weight: bold; color: $($gradeInfo.Color); margin: 20px 0; }
+        .grade-label { font-size: 1.5em; color: #666; margin-bottom: 10px; }
+        .section { background: white; padding: 30px; border-radius: 10px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .section h2 { color: #667eea; border-bottom: 3px solid #667eea; padding-bottom: 10px; margin-bottom: 20px; font-size: 1.8em; }
+        .section h3 { color: #764ba2; margin-top: 25px; margin-bottom: 15px; font-size: 1.3em; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th { background: #667eea; color: white; padding: 12px; text-align: left; font-weight: 600; }
+        td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; }
+        tr:hover { background: #f8f9fa; }
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0; }
+        .metric-card { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 20px; border-radius: 8px; border-left: 4px solid #667eea; }
+        .metric-card h4 { color: #555; font-size: 0.9em; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-card .value { font-size: 2em; font-weight: bold; color: #333; }
+        .metric-card .subvalue { color: #666; font-size: 0.9em; margin-top: 5px; }
+        .alert { padding: 15px 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid; }
+        .alert-danger { background: #f8d7da; border-color: #dc3545; color: #721c24; }
+        .alert-warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
+        .alert-success { background: #d4edda; border-color: #28a745; color: #155724; }
+        .alert-info { background: #d1ecf1; border-color: #17a2b8; color: #0c5460; }
+        .priority-list { list-style: none; counter-reset: priority-counter; }
+        .priority-list li { counter-increment: priority-counter; padding: 15px; margin: 10px 0; background: #f8f9fa; border-radius: 5px; border-left: 4px solid #667eea; }
+        .priority-list li::before { content: counter(priority-counter); background: #667eea; color: white; font-weight: bold; padding: 5px 12px; border-radius: 50%; margin-right: 15px; }
+        .status-badge { display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 600; }
         .badge-success { background: #d4edda; color: #155724; }
         .badge-warning { background: #fff3cd; color: #856404; }
         .badge-danger { background: #f8d7da; color: #721c24; }
         .badge-info { background: #d1ecf1; color: #0c5460; }
-        
-        .progress-bar {
-            width: 100%;
-            height: 30px;
-            background: #e0e0e0;
-            border-radius: 15px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: bold;
-            transition: width 0.3s ease;
-        }
-        
-        .chart-container {
-            margin: 20px 0;
-            padding: 20px;
-            background: #f8f9fa;
-            border-radius: 8px;
-        }
-        
-        footer {
-            text-align: center;
-            padding: 30px;
-            color: #666;
-            font-size: 0.9em;
-        }
-        
-        @media print {
-            body { background: white; }
-            .section { page-break-inside: avoid; }
-        }
+        .progress-bar { width: 100%; height: 30px; background: #e0e0e0; border-radius: 15px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; transition: width 0.3s ease; }
+        footer { text-align: center; padding: 30px; color: #666; font-size: 0.9em; }
     </style>
 </head>
 <body>
@@ -411,7 +205,6 @@ $html = @"
             <p>Analysis of $($workspaces.Count) workspaces, $($datasets.Count) datasets, $($reports.Count) reports</p>
         </header>
         
-        <!-- GOVERNANCE SCORECARD -->
         <div class="scorecard">
             <div class="grade-label">Overall Governance Score</div>
             <div class="score-display">$($gradeInfo.Grade)</div>
@@ -423,7 +216,6 @@ $html = @"
             </p>
         </div>
         
-        <!-- EXECUTIVE SUMMARY -->
         <div class="section">
             <h2>📊 Executive Summary</h2>
             
@@ -451,598 +243,216 @@ $html = @"
             </div>
             
             <h3>Key Findings</h3>
-"@
+"@)
 
-# Add key findings based on scores
+# Add key findings
 if ($unendorsed.Count -gt ($datasets.Count * 0.7)) {
-    $html += @"
-            <div class="alert alert-danger">
-                <strong>⚠️ Critical:</strong> $($unendorsed.Count) datasets ($([Math]::Round(($unendorsed.Count / $datasets.Count) * 100, 1))%) lack endorsement. Implement certification process.
-            </div>
-"@
+    [void]$sb.AppendLine("            <div class='alert alert-danger'><strong>⚠️ Critical:</strong> $($unendorsed.Count) datasets ($([Math]::Round(($unendorsed.Count / $datasets.Count) * 100, 1))%) lack endorsement.</div>")
 }
 
 if ($unlabeled.Count -gt ($datasets.Count * 0.5)) {
-    $html += @"
-            <div class="alert alert-warning">
-                <strong>⚠️ Warning:</strong> $($unlabeled.Count) datasets ($([Math]::Round(($unlabeled.Count / $datasets.Count) * 100, 1))%) have no sensitivity labels. Compliance risk.
-            </div>
-"@
+    [void]$sb.AppendLine("            <div class='alert alert-warning'><strong>⚠️ Warning:</strong> $($unlabeled.Count) datasets ($([Math]::Round(($unlabeled.Count / $datasets.Count) * 100, 1))%) have no sensitivity labels.</div>")
 }
 
 if ($orphanedReports.Count -gt 0) {
-    $html += @"
-            <div class="alert alert-warning">
-                <strong>⚠️ Warning:</strong> $($orphanedReports.Count) orphaned reports detected. These reference deleted datasets.
-            </div>
-"@
+    [void]$sb.AppendLine("            <div class='alert alert-warning'><strong>⚠️ Warning:</strong> $($orphanedReports.Count) orphaned reports detected.</div>")
 }
 
 if ($excelDatasets.Count -gt 0) {
-    $html += @"
-            <div class="alert alert-danger">
-                <strong>🚨 Action Required:</strong> $($excelDatasets.Count) Excel-based datasets found. High priority for migration.
-            </div>
-"@
+    [void]$sb.AppendLine("            <div class='alert alert-danger'><strong>🚨 Action Required:</strong> $($excelDatasets.Count) Excel-based datasets found.</div>")
 }
 
 if ($wellReusedDatasets.Count -gt 0) {
-    $html += @"
-            <div class="alert alert-success">
-                <strong>✓ Good Practice:</strong> $($wellReusedDatasets.Count) datasets are well-reused (3+ reports). Dataset reuse is working.
-            </div>
-"@
+    [void]$sb.AppendLine("            <div class='alert alert-success'><strong>✓ Good Practice:</strong> $($wellReusedDatasets.Count) datasets are well-reused.</div>")
 }
 
-$html += @"
-        </div>
-        
-        <!-- ENDORSEMENT ANALYSIS -->
+[void]$sb.AppendLine("        </div>")
+
+# Section 1: Endorsement
+[void]$sb.AppendLine(@"
         <div class="section">
             <h2>🏆 1. Endorsement Status</h2>
-            <p>Certified and promoted datasets are trusted for enterprise reuse.</p>
-            
-            <div class="chart-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Endorsement Status</th>
-                            <th>Count</th>
-                            <th>Percentage</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-"@
+            <table>
+                <thead><tr><th>Status</th><th>Count</th><th>Percentage</th></tr></thead>
+                <tbody>
+"@)
 
 foreach ($item in $endorsementBreakdown) {
-    $badge = switch ($item.Status) {
-        "Certified" { "badge-success" }
-        "Promoted" { "badge-info" }
-        default { "badge-warning" }
+    [void]$sb.AppendLine("                    <tr><td>$($item.Status)</td><td>$($item.Count)</td><td>$($item.Percentage)%</td></tr>")
+}
+
+[void]$sb.AppendLine("                </tbody></table>")
+
+if ($unendorsed.Count -gt 0) {
+    [void]$sb.AppendLine("            <h3>Top 10 Unendorsed Datasets</h3>")
+    [void]$sb.AppendLine("            <table><thead><tr><th>Workspace</th><th>Dataset</th><th>Owner</th></tr></thead><tbody>")
+    
+    foreach ($ds in ($unendorsed | Select-Object -First 10)) {
+        [void]$sb.AppendLine("                <tr><td>$($ds.WorkspaceName)</td><td>$($ds.DatasetName)</td><td>$($ds.ConfiguredBy)</td></tr>")
     }
     
-    $html += @"
-                        <tr>
-                            <td><span class="status-badge $badge">$($item.Status)</span></td>
-                            <td>$($item.Count)</td>
-                            <td>$($item.Percentage)%</td>
-                            <td>
-                                <div class="progress-bar" style="height: 20px;">
-                                    <div class="progress-fill" style="width: $($item.Percentage)%; font-size: 0.8em;">$($item.Percentage)%</div>
-                                </div>
-                            </td>
-                        </tr>
-"@
+    [void]$sb.AppendLine("            </tbody></table>")
 }
 
-$html += @"
-                    </tbody>
-                </table>
-            </div>
-            
-            <p><strong>Top 10 Unendorsed Datasets (by workspace):</strong></p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Workspace</th>
-                        <th>Dataset Name</th>
-                        <th>Owner</th>
-                        <th>Created Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-"@
+[void]$sb.AppendLine("        </div>")
 
-$unendorsed | Select-Object -First 10 | ForEach-Object {
-    $html += @"
-                    <tr>
-                        <td>$($_.WorkspaceName)</td>
-                        <td>$($_.DatasetName)</td>
-                        <td>$($_.ConfiguredBy)</td>
-                        <td>$($_.CreatedDate)</td>
-                    </tr>
-"@
-}
-
-$html += @"
-                </tbody>
-            </table>
-        </div>
-        
-        <!-- SENSITIVITY LABELS -->
+# Section 2: Sensitivity Labels
+[void]$sb.AppendLine(@"
         <div class="section">
             <h2>🔒 2. Sensitivity Labels</h2>
-            <p>Data classification for compliance and data protection.</p>
-            
             <table>
-                <thead>
-                    <tr>
-                        <th>Label</th>
-                        <th>Count</th>
-                        <th>Percentage</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>Label</th><th>Count</th><th>Percentage</th></tr></thead>
                 <tbody>
-"@
+"@)
 
 foreach ($item in $labelBreakdown) {
-    $html += @"
-                    <tr>
-                        <td>$($item.Label)</td>
-                        <td>$($item.Count)</td>
-                        <td>$($item.Percentage)%</td>
-                    </tr>
-"@
+    [void]$sb.AppendLine("                    <tr><td>$($item.Label)</td><td>$($item.Count)</td><td>$($item.Percentage)%</td></tr>")
 }
 
-$html += @"
-                </tbody>
-            </table>
-            
-            $(if ($unlabeled.Count -gt 0) { 
-                "<div class='alert alert-warning'><strong>Action:</strong> $($unlabeled.Count) datasets require sensitivity label assignment for compliance.</div>"
-            })
-        </div>
-        
-        <!-- DATA SOURCE CONFIGURATION -->
+[void]$sb.AppendLine("                </tbody></table></div>")
+
+# Section 3: Data Sources
+[void]$sb.AppendLine(@"
         <div class="section">
             <h2>🔌 3. Data Source Configuration</h2>
-            
-            <h3>Dataset Types</h3>
             <div class="metric-grid">
                 <div class="metric-card">
                     <h4>PBIX Import Mode</h4>
                     <div class="value">$($pbixImportDatasets.Count)</div>
                     <div class="subvalue">$($pbixWithSources.Count) with metadata</div>
                 </div>
-                <div class="metric-card" style="$(if ($excelDatasets.Count -gt 0) { 'background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);' })">
+                <div class="metric-card">
                     <h4>Excel Workbooks</h4>
-                    <div class="value" style="$(if ($excelDatasets.Count -gt 0) { 'color: #dc3545;' })">$($excelDatasets.Count)</div>
-                    <div class="subvalue">$(if ($excelDatasets.Count -gt 0) { '⚠️ Requires migration' } else { '✓ None found' })</div>
+                    <div class="value">$($excelDatasets.Count)</div>
                 </div>
                 <div class="metric-card">
                     <h4>Database-backed</h4>
-                    <div class="value" style="color: #28a745;">$($databaseDatasetIds.Count)</div>
-                    <div class="subvalue">✓ Best practice</div>
+                    <div class="value">$($databaseDatasetIds.Count)</div>
                 </div>
                 <div class="metric-card">
                     <h4>Dataflows</h4>
-                    <div class="value" style="color: #28a745;">$($dataflowDatasets.Count)</div>
-                    <div class="subvalue">✓ Excellent reusability</div>
+                    <div class="value">$($dataflowDatasets.Count)</div>
                 </div>
             </div>
-            
-            <h3>Data Source Type Breakdown (Top 10)</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Source Type</th>
-                        <th>Count</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-"@
+"@)
 
-$sourceTypeBreakdown | Select-Object -First 10 | ForEach-Object {
-    $status = if ($databaseTypes -contains $_.Type) { 
-        "<span class='status-badge badge-success'>Recommended</span>"
-    } elseif ($fileBasedTypes -contains $_.Type) {
-        "<span class='status-badge badge-warning'>Review</span>"
-    } else {
-        "<span class='status-badge badge-info'>Standard</span>"
+if ($excelDatasets.Count -gt 0) {
+    [void]$sb.AppendLine("            <div class='alert alert-danger'><strong>Critical:</strong> $($excelDatasets.Count) Excel datasets require migration.</div>")
+    [void]$sb.AppendLine("            <table><thead><tr><th>Workspace</th><th>Dataset</th><th>Owner</th></tr></thead><tbody>")
+    
+    foreach ($ds in ($excelDatasets | Select-Object -First 10)) {
+        [void]$sb.AppendLine("                <tr><td>$($ds.WorkspaceName)</td><td>$($ds.DatasetName)</td><td>$($ds.ConfiguredBy)</td></tr>")
     }
     
-    $html += @"
-                    <tr>
-                        <td>$($_.Type)</td>
-                        <td>$($_.Count)</td>
-                        <td>$status</td>
-                    </tr>
-"@
+    [void]$sb.AppendLine("            </tbody></table>")
 }
 
-$html += @"
-                </tbody>
-            </table>
-            
-            $(if ($excelDatasets.Count -gt 0) {
-                @"
-            <h3>⚠️ Excel Datasets Requiring Migration</h3>
-            <div class="alert alert-danger">
-                <strong>Critical Action Required:</strong> $($excelDatasets.Count) datasets use Excel workbooks as sources. 
-                These are fragile, have size limitations, and poor performance. Migrate to SQL Server, Dataflows, or proper PBIX.
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Workspace</th>
-                        <th>Dataset Name</th>
-                        <th>Owner</th>
-                        <th>Refreshable</th>
-                    </tr>
-                </thead>
-                <tbody>
-"@ + (($excelDatasets | Select-Object -First 10 | ForEach-Object {
-                    "<tr><td>$($_.WorkspaceName)</td><td>$($_.DatasetName)</td><td>$($_.ConfiguredBy)</td><td>$($_.IsRefreshable)</td></tr>"
-                }) -join "`n") + @"
-                </tbody>
-            </table>
-"@
-            })
-        </div>
-        
-        <!-- WORKSPACE HEALTH -->
+[void]$sb.AppendLine("        </div>")
+
+# Section 4: Workspace Health
+[void]$sb.AppendLine(@"
         <div class="section">
             <h2>🏢 4. Workspace Health</h2>
-            
             <div class="metric-grid">
                 <div class="metric-card">
                     <h4>Shared Capacity</h4>
                     <div class="value">$($sharedCapacity.Count)</div>
-                    <div class="subvalue">$([Math]::Round(($sharedCapacity.Count / $workspaces.Count) * 100, 1))% of total</div>
                 </div>
                 <div class="metric-card">
                     <h4>Premium/Fabric</h4>
                     <div class="value">$($premiumCapacity.Count)</div>
-                    <div class="subvalue">$([Math]::Round(($premiumCapacity.Count / $workspaces.Count) * 100, 1))% of total</div>
                 </div>
                 <div class="metric-card">
                     <h4>Empty Workspaces</h4>
-                    <div class="value" style="$(if ($emptyWorkspaces.Count -gt 10) { 'color: #dc3545;' })">$($emptyWorkspaces.Count)</div>
-                    <div class="subvalue">Cleanup candidates</div>
+                    <div class="value">$($emptyWorkspaces.Count)</div>
                 </div>
                 <div class="metric-card">
                     <h4>Inactive</h4>
-                    <div class="value" style="$(if ($inactiveWorkspaces.Count -gt 0) { 'color: #dc3545;' })">$($inactiveWorkspaces.Count)</div>
-                    <div class="subvalue">Requires attention</div>
+                    <div class="value">$($inactiveWorkspaces.Count)</div>
                 </div>
             </div>
-            
-            <h3>Workspace Type Distribution</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Type</th>
-                        <th>Count</th>
-                        <th>Percentage</th>
-                    </tr>
-                </thead>
-                <tbody>
-"@
-
-foreach ($item in $workspaceTypeBreakdown) {
-    $pct = [Math]::Round(($item.Count / $workspaces.Count) * 100, 1)
-    $html += @"
-                    <tr>
-                        <td>$($item.Type)</td>
-                        <td>$($item.Count)</td>
-                        <td>$pct%</td>
-                    </tr>
-"@
-}
-
-$html += @"
-                </tbody>
-            </table>
         </div>
-        
-        <!-- DATASET REUSE -->
+"@)
+
+# Section 5: Dataset Reuse
+[void]$sb.AppendLine(@"
         <div class="section">
             <h2>♻️ 5. Dataset Reuse & Duplication</h2>
-            
             <div class="metric-grid">
                 <div class="metric-card">
-                    <h4>Well-Reused Datasets</h4>
-<div class="value" style="color: #28a745;">((
-(wellReusedDatasets.Count)
-</div>
-<div class="subvalue">Used by 3+ reports</div>
-</div>
-<div class="metric-card">
-<h4>Single-Use Datasets</h4>
-<div class="value" style="color: #ffc107;">((
-(singleUseDatasets.Count)
-</div>
-<div class="subvalue">Potential duplication</div>
-</div>
-<div class="metric-card">
-<h4>Duplicate Names</h4>
-<div class="value" style="$(if ($potentialDuplicates.Count -gt 5) { 'color: #dc3545;' })">((
-(potentialDuplicates.Count)
-</div>
-<div class="subvalue">Same name, different workspace</div>
-</div>
-</div>
-        $(if ($potentialDuplicates.Count -gt 0) {
-            @"
-        <h3>Potential Duplicate Datasets (Top 10)</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Dataset Name</th>
-                    <th>Instances</th>
-                </tr>
-            </thead>
-            <tbody>
-"@ + (($potentialDuplicates | Select-Object -First 10 | ForEach-Object {
-                    "<tr><td>((
-(_.DatasetName)</td><td>((
-(_.Count)</td></tr>"
-                }) -join "`n") + @"
-                </tbody>
-            </table>
-"@
-            })
+                    <h4>Well-Reused (3+ reports)</h4>
+                    <div class="value">$($wellReusedDatasets.Count)</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Single-Use</h4>
+                    <div class="value">$($singleUseDatasets.Count)</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Duplicate Names</h4>
+                    <div class="value">$($potentialDuplicates.Count)</div>
+                </div>
+            </div>
         </div>
+"@)
 
-    <!-- OWNERSHIP -->
-    <div class="section">
-        <h2>👤 6. Content Ownership</h2>
-        
-        <h3>Top 10 Dataset Owners</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Owner</th>
-                    <th>Dataset Count</th>
-                    <th>Risk Level</th>
-                </tr>
-            </thead>
-            <tbody>
-"@
-$ownerBreakdown | Select-Object -First 10 | ForEach-Object {
-    risk=if(risk = if (
-risk=if(_.Count -gt 20) {
-        "<span class='status-badge badge-danger'>High</span>"
-    } elseif ($_.Count -gt 10) {
-        "<span class='status-badge badge-warning'>Medium</span>"
-    } else {
-        "<span class='status-badge badge-success'>Low</span>"
-    }
+# Section 6: Ownership
+[void]$sb.AppendLine(@"
+        <div class="section">
+            <h2>👤 6. Content Ownership</h2>
+            <h3>Top 10 Dataset Owners</h3>
+            <table>
+                <thead><tr><th>Owner</th><th>Dataset Count</th></tr></thead>
+                <tbody>
+"@)
 
-$html += @"
-                <tr>
-                    <td>$($_.Owner)</td>
-                    <td>$($_.Count)</td>
-                    <td>$risk</td>
-                </tr>
-"@
+foreach ($owner in ($ownerBreakdown | Select-Object -First 10)) {
+    [void]$sb.AppendLine("                    <tr><td>$($owner.Owner)</td><td>$($owner.Count)</td></tr>")
 }
-$html += @"
-</tbody>
-</table>
-        $(if ($singlePointOfFailure.Count -gt 0) {
-            "<div class='alert alert-warning'><strong>Risk:</strong> $($singlePointOfFailure.Count) owners have 10+ datasets. Consider distributing ownership.</div>"
-        })
-    </div>
-    
-    <!-- GATEWAY DEPENDENCIES -->
-    <div class="section">
-        <h2>🌉 7. Gateway Dependencies</h2>
-        
-        <p><strong>Gateway-Dependent Datasets:</strong> $($gatewayDatasets.Count)</p>
-        <p><strong>Unique Gateways:</strong> $($gatewayBreakdown.Count)</p>
-        
-        $(if ($gatewayBreakdown.Count -gt 0) {
-            @"
-        <h3>Top 5 Gateways by Dataset Count</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Gateway ID</th>
-                    <th>Dataset Count</th>
-                </tr>
-            </thead>
-            <tbody>
-"@ + (($gatewayBreakdown | Select-Object -First 5 | ForEach-Object {
-                    "<tr><td>((
-(_.GatewayId)</td><td>((
-(_.Count)</td></tr>"
-                }) -join "`n") + @"
-                </tbody>
-            </table>
-"@
-            })
-        </div>
 
-    <!-- ORPHANED CONTENT -->
-    <div class="section">
-        <h2>🔗 8. Orphaned & Broken Content</h2>
-        
-        <div class="metric-grid">
-            <div class="metric-card">
-                <h4>Orphaned Reports</h4>
-                <div class="value" style="$(if ($orphanedReports.Count -gt 0) { 'color: #dc3545;' })">$($orphanedReports.Count)</div>
-                <div class="subvalue">Dataset not found</div>
-            </div>
-            <div class="metric-card">
-                <h4>Datasets Without Sources</h4>
-                <div class="value">$($datasetsNoSources.Count)</div>
-                <div class="subvalue">Excluding PBIX import</div>
-            </div>
-        </div>
-        
-        $(if ($orphanedReports.Count -gt 0) {
-            @"
-        <div class="alert alert-danger">
-            <strong>Action Required:</strong> $($orphanedReports.Count) reports reference deleted datasets and should be removed.
-        </div>
-        
-        <h3>Orphaned Reports (Top 10)</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Workspace</th>
-                    <th>Report Name</th>
-                    <th>Missing Dataset ID</th>
-                    <th>Last Modified</th>
-                </tr>
-            </thead>
-            <tbody>
-"@ + (($orphanedReports | Select-Object -First 10 | ForEach-Object {
-                    "<tr><td>((
-(_.WorkspaceName)</td><td>((
-(_.ReportName)</td><td>((
-(_.DatasetId)</td><td>((
-(_.ModifiedDate)</td></tr>"
-                }) -join "`n") + @"
-                </tbody>
-            </table>
-"@
-            })
-        </div>
+[void]$sb.AppendLine("                </tbody></table></div>")
 
-    <!-- REFRESH & RLS -->
-    <div class="section">
-        <h2>🔄 9. Refresh Configuration & Security</h2>
-        
-        <div class="metric-grid">
-            <div class="metric-card">
-                <h4>Refreshable Datasets</h4>
-                <div class="value">$($refreshableDatasets.Count)</div>
-                <div class="subvalue">$([Math]::Round(($refreshableDatasets.Count / $datasets.Count) * 100, 1))% of total</div>
-            </div>
-            <div class="metric-card">
-                <h4>Non-Refreshable</h4>
-                <div class="value">$($nonRefreshable.Count)</div>
-                <div class="subvalue">Static datasets</div>
-            </div>
-            <div class="metric-card">
-                <h4>RLS-Enabled</h4>
-                <div class="value">$($rlsDatasets.Count)</div>
-                <div class="subvalue">Row-level security</div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- ACTION PRIORITIES -->
-    <div class="section">
-        <h2>🎯 10. Recommended Actions</h2>
-        <p>Prioritized list of governance improvements:</p>
-        
-        <ul class="priority-list">
-"@
-Build priority list dynamically
+# Section 7: Priorities
+[void]$sb.AppendLine(@"
+        <div class="section">
+            <h2>🎯 7. Recommended Actions</h2>
+            <ul class="priority-list">
+"@)
+
+# Build priorities
 $priorities = @()
 if ($excelDatasets.Count -gt 0) {
-    priorities += "Migrate $(
-excelDatasets.Count) Excel-based datasets to SQL Server, Dataflows, or proper PBIX (Critical - Fragile sources)"
+    $priorities += "Migrate $($excelDatasets.Count) Excel-based datasets"
 }
-
 if ($orphanedReports.Count -gt 0) {
-    priorities += "Clean up $(
-orphanedReports.Count) orphaned reports that reference deleted datasets"
+    $priorities += "Clean up $($orphanedReports.Count) orphaned reports"
 }
-
-if (unendorsed.Count−gt(unendorsed.Count -gt (
-unendorsed.Count−gt(datasets.Count * 0.7)) {
-    priorities += "Implement dataset endorsement process - $(
-unendorsed.Count) datasets (([Math]::Round((([Math]::Round((
-([Math]::Round((unendorsed.Count / $datasets.Count) * 100, 1))%) lack certification/promotion"
+if ($unendorsed.Count -gt ($datasets.Count * 0.7)) {
+    $priorities += "Implement endorsement for $($unendorsed.Count) datasets"
 }
-
-if (unlabeled.Count−gt(unlabeled.Count -gt (
-unlabeled.Count−gt(datasets.Count * 0.5)) {
-    priorities += "Apply sensitivity labels to $(
-unlabeled.Count) datasets for compliance (([Math]::Round((([Math]::Round((
-([Math]::Round((unlabeled.Count / $datasets.Count) * 100, 1))%)"
-}
-
 if ($emptyWorkspaces.Count -gt 5) {
-    priorities += "Archive or delete $(
-emptyWorkspaces.Count) empty workspaces to reduce clutter"
+    $priorities += "Archive $($emptyWorkspaces.Count) empty workspaces"
 }
 
-if ($potentialDuplicates.Count -gt 10) {
-    priorities += "Review $(
-potentialDuplicates.Count) potential duplicate datasets for consolidation opportunities"
-}
-
-if ($singlePointOfFailure.Count -gt 0) {
-    priorities += "Distribute ownership for $(
-singlePointOfFailure.Count) owners managing 10+ datasets each"
-}
-
-if ($fileBasedDatasets.Count -gt 0) {
-    priorities += "Evaluate $(
-fileBasedDatasets.Count) file-based datasets (SharePoint, folders) for database migration"
-}
-
-if ($pbixWithoutSources.Count -gt 10) {
-    priorities += "Verify refresh schedules for $(
-pbixWithoutSources.Count) PBIX datasets without source metadata"
-}
-
-if ($priorities.Count -eq 0) {
-$priorities += "Continue monitoring - governance is in good shape! ✓"
-}
 foreach ($priority in $priorities) {
-$html += "                <li>$priority</li>`n"
+    [void]$sb.AppendLine("                <li>$priority</li>")
 }
-$html += @"
-</ul>
-</div>
-    <!-- EXPORT REFERENCE -->
-    <div class="section">
-        <h2>📁 Exported CSV Files</h2>
-        <p>The following detailed CSV exports were generated alongside this report:</p>
+
+[void]$sb.AppendLine(@"
+            </ul>
+        </div>
         
-        <ul style="list-style: none; padding-left: 0;">
-            <li>✓ <code>Workspaces_$timestamp.csv</code> - All workspace details</li>
-            <li>✓ <code>Datasets_$timestamp.csv</code> - All dataset metadata</li>
-            <li>✓ <code>Reports_$timestamp.csv</code> - All report details</li>
-            <li>✓ <code>DataSources_$timestamp.csv</code> - Data source connections</li>
-            <li>✓ <code>DatasetSchema_$timestamp.csv</code> - Table and column schemas</li>
-            <li>✓ <code>Measures_$timestamp.csv</code> - DAX measures</li>
-            <li>✓ <code>Lineage_$timestamp.csv</code> - Dataset dependencies</li>
-            <li>✓ <code>UserAccess_$timestamp.csv</code> - User permissions</li>
-            $(if ($unendorsed.Count -gt 0) { "<li>⚠️ <code>Datasets_Unendorsed_$timestamp.csv</code></li>" })
-            $(if ($unlabeled.Count -gt 0) { "<li>⚠️ <code>Datasets_NoSensitivityLabel_$timestamp.csv</code></li>" })
-            $(if ($orphanedReports.Count -gt 0) { "<li>⚠️ <code>Reports_Orphaned_$timestamp.csv</code></li>" })
-            $(if ($excelDatasets.Count -gt 0) { "<li>🚨 <code>Datasets_Excel_MIGRATE_$timestamp.csv</code></li>" })
-            $(if ($emptyWorkspaces.Count -gt 0) { "<li>⚠️ <code>Workspaces_Empty_$timestamp.csv</code></li>" })
-        </ul>
+        <footer>
+            <p>Power BI Governance Assessment Report</p>
+            <p>Generated: $reportDate</p>
+        </footer>
     </div>
-    
-    <footer>
-        <p>Power BI Governance Assessment Report</p>
-        <p>Generated: $reportDate | Total Assets Analyzed: $($workspaces.Count + $datasets.Count + $reports.Count)</p>
-    </footer>
-</div>
 </body>
 </html>
-"@
-<#
-============================================================================
-SAVE HTML REPORT
-============================================================================
-#>
-$reportPath = "PowerBI_Governance_Report_timestamp.html"
-$html | Out-File -FilePath $reportPath -Encoding UTF8
+"@)
 
-Write-Host "n========================================" -ForegroundColor Green Write-Host "✓ HTML REPORT GENERATED" -ForegroundColor Green Write-Host "========================================" -ForegroundColor Green Write-Host "File: $reportPath" -ForegroundColor White Write-Host "nOpening in default browser..." -ForegroundColor Cyan
-Open in browser
+# Save and open
+$reportPath = "PowerBI_Governance_Report_$timestamp.html"
+$sb.ToString() | Out-File -FilePath $reportPath -Encoding UTF8
+
+Write-Host "`n✓ HTML Report Generated: $reportPath" -ForegroundColor Green
 Start-Process $reportPath
-Write-Host "`n✓ Done! Share this report with stakeholders." -ForegroundColor Green
