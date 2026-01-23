@@ -12,37 +12,195 @@ function Get-SettingCategory {
     param([string]$settingName)
     
     switch -Wildcard ($settingName) {
-        "*Export*" { "Export & Sharing" }
-        "*Share*" { "Export & Sharing" }
-        "*Publish*" { "Export & Sharing" }
-        "*Admin*" { "Admin & API" }
-        "*API*" { "Admin & API" }
-        "*ServicePrincipal*" { "Admin & API" }
-        "*Metadata*" { "Admin & API" }
-        "*Workspace*" { "Workspace Management" }
-        "*Capacity*" { "Capacity & Performance" }
-        "*Dataflow*" { "Dataflows & Datasets" }
-        "*Dataset*" { "Dataflows & Datasets" }
-        "*Template*" { "Development" }
-        "*CustomVisual*" { "Development" }
-        "*RScript*" { "Development" }
-        "*Python*" { "Development" }
-        "*Email*" { "Notifications" }
-        "*Subscription*" { "Notifications" }
-        "*Guest*" { "Security & Access" }
-        "*External*" { "Security & Access" }
-        "*B2B*" { "Security & Access" }
-        "*InformationProtection*" { "Security & Access" }
-        "*Sensitivity*" { "Security & Access" }
-        "*Certification*" { "Governance" }
-        "*Endorsement*" { "Governance" }
-        "*Discovery*" { "Governance" }
-        default { "Other" }
+        "*Export*" { return "Export & Sharing" }
+        "*Share*" { return "Export & Sharing" }
+        "*Publish*" { return "Export & Sharing" }
+        "*Admin*" { return "Admin & API" }
+        "*API*" { return "Admin & API" }
+        "*ServicePrincipal*" { return "Admin & API" }
+        "*Metadata*" { return "Admin & API" }
+        "*Workspace*" { return "Workspace Management" }
+        "*Capacity*" { return "Capacity & Performance" }
+        "*Dataflow*" { return "Dataflows & Datasets" }
+        "*Dataset*" { return "Dataflows & Datasets" }
+        "*Template*" { return "Development" }
+        "*CustomVisual*" { return "Development" }
+        "*RScript*" { return "Development" }
+        "*Python*" { return "Development" }
+        "*Email*" { return "Notifications" }
+        "*Subscription*" { return "Notifications" }
+        "*Guest*" { return "Security & Access" }
+        "*External*" { return "Security & Access" }
+        "*B2B*" { return "Security & Access" }
+        "*InformationProtection*" { return "Security & Access" }
+        "*Sensitivity*" { return "Security & Access" }
+        "*Certification*" { return "Governance" }
+        "*Endorsement*" { return "Governance" }
+        "*Discovery*" { return "Governance" }
+        default { return "Other" }
     }
 }
 
+function Get-SecurityEvaluation {
+    param(
+        [string]$settingName,
+        [string]$title,
+        [bool]$enabled,
+        [string]$enabledFor
+    )
+    
+    # Define security rules
+    $evaluation = switch -Wildcard ($settingName) {
+        # HIGH RISK if enabled for everyone
+        "*PublishToWeb*" {
+            if ($enabled -and $enabledFor -eq "Entire Organization") {
+                @{ Risk = "High Risk"; Color = "#dc3545"; Icon = "🚨"; Reason = "Public internet exposure" }
+            } elseif ($enabled) {
+                @{ Risk = "Medium Risk"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Limited public exposure" }
+            } else {
+                @{ Risk = "Secure"; Color = "#28a745"; Icon = "✓"; Reason = "Public sharing disabled" }
+            }
+        }
+        
+        "*ShareLinkToEntireOrganization*" {
+            if ($enabled -and $enabledFor -eq "Entire Organization") {
+                @{ Risk = "Medium Risk"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Org-wide sharing enabled" }
+            } else {
+                @{ Risk = "Acceptable"; Color = "#17a2b8"; Icon = "ℹ️"; Reason = "Controlled sharing" }
+            }
+        }
+        
+        "*ExternalDataSharing*" {
+            if ($enabled -and $enabledFor -eq "Entire Organization") {
+                @{ Risk = "High Risk"; Color = "#dc3545"; Icon = "🚨"; Reason = "External data sharing" }
+            } elseif ($enabled) {
+                @{ Risk = "Medium Risk"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Limited external sharing" }
+            } else {
+                @{ Risk = "Secure"; Color = "#28a745"; Icon = "✓"; Reason = "External sharing disabled" }
+            }
+        }
+        
+        "*Guest*" {
+            if ($enabled -and $enabledFor -eq "Entire Organization") {
+                @{ Risk = "Review Required"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Guest access enabled" }
+            } elseif ($enabled) {
+                @{ Risk = "Acceptable"; Color = "#17a2b8"; Icon = "ℹ️"; Reason = "Controlled guest access" }
+            } else {
+                @{ Risk = "Secure"; Color = "#28a745"; Icon = "✓"; Reason = "No guest access" }
+            }
+        }
+        
+        # SHOULD BE ENABLED (governance/compliance)
+        "*InformationProtection*" {
+            if ($enabled) {
+                @{ Risk = "Compliant"; Color = "#28a745"; Icon = "✓"; Reason = "Data protection enabled" }
+            } else {
+                @{ Risk = "Compliance Gap"; Color = "#dc3545"; Icon = "🚨"; Reason = "Missing data protection" }
+            }
+        }
+        
+        "*Sensitivity*" {
+            if ($enabled) {
+                @{ Risk = "Compliant"; Color = "#28a745"; Icon = "✓"; Reason = "Labeling enabled" }
+            } else {
+                @{ Risk = "Compliance Gap"; Color = "#ffc107"; Icon = "⚠️"; Reason = "No sensitivity labels" }
+            }
+        }
+        
+        "*Certification*" {
+            if ($enabled) {
+                @{ Risk = "Good Practice"; Color = "#28a745"; Icon = "✓"; Reason = "Certification available" }
+            } else {
+                @{ Risk = "Governance Gap"; Color = "#ffc107"; Icon = "⚠️"; Reason = "No certification process" }
+            }
+        }
+        
+        "*Endorsement*" {
+            if ($enabled) {
+                @{ Risk = "Good Practice"; Color = "#28a745"; Icon = "✓"; Reason = "Endorsement enabled" }
+            } else {
+                @{ Risk = "Governance Gap"; Color = "#ffc107"; Icon = "⚠️"; Reason = "No endorsement" }
+            }
+        }
+        
+        # Admin API - should be enabled but restricted
+        "*ServicePrincipal*" {
+            if ($enabled -and $enabledFor -like "Specific Groups:*") {
+                @{ Risk = "Good Practice"; Color = "#28a745"; Icon = "✓"; Reason = "API access controlled" }
+            } elseif ($enabled -and $enabledFor -eq "Entire Organization") {
+                @{ Risk = "Medium Risk"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Unrestricted API access" }
+            } elseif ($enabled) {
+                @{ Risk = "Acceptable"; Color = "#17a2b8"; Icon = "ℹ️"; Reason = "API access enabled" }
+            } else {
+                @{ Risk = "Limited Capability"; Color = "#6c757d"; Icon = "⚠️"; Reason = "API disabled" }
+            }
+        }
+        
+        "*AdminApi*" {
+            if ($enabled) {
+                @{ Risk = "Good Practice"; Color = "#28a745"; Icon = "✓"; Reason = "Admin capabilities enabled" }
+            } else {
+                @{ Risk = "Limited Capability"; Color = "#6c757d"; Icon = "ℹ️"; Reason = "Admin API disabled" }
+            }
+        }
+        
+        "*Metadata*" {
+            if ($enabled) {
+                @{ Risk = "Good Practice"; Color = "#28a745"; Icon = "✓"; Reason = "Metadata access enabled" }
+            } else {
+                @{ Risk = "Limited Capability"; Color = "#6c757d"; Icon = "ℹ️"; Reason = "Metadata access limited" }
+            }
+        }
+        
+        # Export capabilities - generally acceptable
+        "*ExportToExcel*" {
+            @{ Risk = "Acceptable"; Color = "#17a2b8"; Icon = "ℹ️"; Reason = "Standard export capability" }
+        }
+        
+        "*ExportReport*" {
+            @{ Risk = "Acceptable"; Color = "#17a2b8"; Icon = "ℹ️"; Reason = "Standard export capability" }
+        }
+        
+        "*PrintReport*" {
+            @{ Risk = "Acceptable"; Color = "#17a2b8"; Icon = "ℹ️"; Reason = "Standard capability" }
+        }
+        
+        # Development features - depends on use case
+        "*CustomVisual*" {
+            if ($enabled -and $enabledFor -eq "Entire Organization") {
+                @{ Risk = "Review Required"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Uncertified visuals allowed" }
+            } else {
+                @{ Risk = "Acceptable"; Color = "#17a2b8"; Icon = "ℹ️"; Reason = "Controlled visual usage" }
+            }
+        }
+        
+        "*RScript*" {
+            if ($enabled) {
+                @{ Risk = "Review Required"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Code execution enabled" }
+            } else {
+                @{ Risk = "Secure"; Color = "#28a745"; Icon = "✓"; Reason = "Script execution disabled" }
+            }
+        }
+        
+        "*Python*" {
+            if ($enabled) {
+                @{ Risk = "Review Required"; Color = "#ffc107"; Icon = "⚠️"; Reason = "Code execution enabled" }
+            } else {
+                @{ Risk = "Secure"; Color = "#28a745"; Icon = "✓"; Reason = "Script execution disabled" }
+            }
+        }
+        
+        # Default for other settings
+        default {
+            @{ Risk = "Standard"; Color = "#6c757d"; Icon = "—"; Reason = "Standard setting" }
+        }
+    }
+    
+    return $evaluation
+}
+
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$reportDate = Get-Date -Format "MMMM dd, yyyy HH:mm"
+$reportDate = Get-Date -Format "yyyy-MM-dd HH:mm"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "POWER BI TENANT SETTINGS EXPORT" -ForegroundColor Cyan
@@ -64,15 +222,13 @@ Write-Host "Retrieving tenant settings from Fabric API..." -ForegroundColor Yell
 
 try {
     $response = Invoke-RestMethod `
-        -Uri "https://api.fabric.microsoft.com/v1/admin/tenantsettings" `
-        -Method Get `
-        -Headers @{ Authorization = "Bearer $token" }
+        -Uri "https://api.fabric.microsoft.com/v1/admin/tenantsettings" -Method Get -Authentication Bearer -Token $token
     
     Write-Host "✓ Retrieved $($response.tenantSettings.Count) settings`n" -ForegroundColor Green
 }
 catch {
     Write-Host "✗ Failed to retrieve settings: $($_.Exception.Message)" -ForegroundColor Red
-    exit
+    # exit
 }
 
 # ============================================================================
@@ -87,12 +243,10 @@ $allSettings = foreach ($setting in $response.tenantSettings) {
     $enabledFor = if ($setting.enabled -eq $true) {
         if ($setting.canSpecifySecurityGroups -eq $true) {
             if ($setting.tenantSettingGroup) {
-                # Has specific groups
                 $groupNames = ($setting.tenantSettingGroup | ForEach-Object { $_.groupName }) -join "; "
                 "Specific Groups: $groupNames"
             }
             elseif ($setting.excludedSecurityGroups) {
-                # Excluded groups (enabled for all EXCEPT these)
                 $excludedNames = ($setting.excludedSecurityGroups | ForEach-Object { $_.groupName }) -join "; "
                 "All Users (except: $excludedNames)"
             }
@@ -111,7 +265,6 @@ $allSettings = foreach ($setting in $response.tenantSettings) {
         "Not Configured"
     }
     
-    # Get delegated tenant setting groups if applicable
     $delegatedTo = if ($setting.delegatedToUsers) {
         ($setting.delegatedToUsers | ForEach-Object { $_.groupName }) -join "; "
     }
@@ -119,7 +272,6 @@ $allSettings = foreach ($setting in $response.tenantSettings) {
         "N/A"
     }
     
-    # Additional properties (some settings have extra config)
     $properties = if ($setting.properties) {
         ($setting.properties | ForEach-Object { "$($_.name): $($_.value)" }) -join "; "
     }
@@ -127,15 +279,23 @@ $allSettings = foreach ($setting in $response.tenantSettings) {
         ""
     }
     
+    # Get category and security evaluation
+    $category = Get-SettingCategory -settingName $setting.settingName
+    $securityEval = Get-SecurityEvaluation -settingName $setting.settingName -title $setting.title -enabled $setting.enabled -enabledFor $enabledFor
+    
     [PSCustomObject]@{
         SettingName              = $setting.settingName
         Title                    = $setting.title
+        Category                 = $category
         Enabled                  = $setting.enabled
         EnabledFor               = $enabledFor
+        SecurityRisk             = $securityEval.Risk
+        RiskReason               = $securityEval.Reason
         CanSpecifySecurityGroups = $setting.canSpecifySecurityGroups
         DelegatedToUsers         = $delegatedTo
-        Category                 = Get-SettingCategory -settingName $setting.settingName
         AdditionalProperties     = $properties
+        RiskColor                = $securityEval.Color
+        RiskIcon                 = $securityEval.Icon
     }
 }
 
@@ -144,165 +304,50 @@ $allSettings = foreach ($setting in $response.tenantSettings) {
 # ============================================================================
 
 $csvPath = "PowerBI_TenantSettings_$timestamp.csv"
-$allSettings | Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
+$allSettings | Select-Object SettingName, Title, Category, Enabled, EnabledFor, SecurityRisk, RiskReason, CanSpecifySecurityGroups, DelegatedToUsers, AdditionalProperties |
+    Export-Csv -Path $csvPath -NoTypeInformation -Encoding UTF8
 
 Write-Host "✓ Settings exported to CSV: $csvPath`n" -ForegroundColor Green
 
 # ============================================================================
-# ANALYSIS - Category Summary
+# ANALYSIS - Security Summary
 # ============================================================================
 
-Write-Host "Analyzing settings by category..." -ForegroundColor Yellow
+Write-Host "Analyzing security posture..." -ForegroundColor Yellow
+
+$securitySummary = $allSettings | Group-Object SecurityRisk | ForEach-Object {
+    [PSCustomObject]@{
+        RiskLevel = $_.Name
+        Count = $_.Count
+        Percentage = [Math]::Round(($_.Count / $allSettings.Count) * 100, 1)
+    }
+} | Sort-Object Count -Descending
+
+# ============================================================================
+# ANALYSIS - Category Summary (without enabled/disabled counts)
+# ============================================================================
 
 $categorySummary = $allSettings | Group-Object Category | ForEach-Object {
-    $enabled = ($_.Group | Where-Object { $_.Enabled -eq $true }).Count
-    $disabled = ($_.Group | Where-Object { $_.Enabled -eq $false }).Count
+    $highRisk = ($_.Group | Where-Object { $_.SecurityRisk -eq "High Risk" }).Count
+    $mediumRisk = ($_.Group | Where-Object { $_.SecurityRisk -eq "Medium Risk" }).Count
+    $complianceGap = ($_.Group | Where-Object { $_.SecurityRisk -like "*Gap*" }).Count
     
     [PSCustomObject]@{
         Category = $_.Name
         Total = $_.Count
-        Enabled = $enabled
-        Disabled = $disabled
-        EnabledPercentage = [Math]::Round(($enabled / $_.Count) * 100, 1)
+        HighRisk = $highRisk
+        MediumRisk = $mediumRisk
+        ComplianceGaps = $complianceGap
     }
 } | Sort-Object Category
 
 # ============================================================================
-# ANALYSIS - Critical Settings Check
+# ANALYSIS - Critical Findings
 # ============================================================================
 
-Write-Host "Checking critical settings..." -ForegroundColor Yellow
-
-$criticalSettings = @()
-
-# Admin API settings
-$adminApiSetting = $allSettings | Where-Object { 
-    $_.SettingName -like "*ServicePrincipalAccess*" -or 
-    $_.Title -like "*service principals*read-only admin*"
-} | Select-Object -First 1
-
-$criticalSettings += [PSCustomObject]@{
-    Setting = "Service principals - Admin API access"
-    Current = if ($adminApiSetting.Enabled) { "Enabled" } else { "Disabled" }
-    EnabledFor = $adminApiSetting.EnabledFor
-    Recommendation = "Enable for automation (with security group restriction)"
-    Status = if ($adminApiSetting.Enabled) { "OK" } else { "Review" }
-    Severity = "Medium"
-}
-
-# Publish to web
-$publishWebSetting = $allSettings | Where-Object { $_.SettingName -like "*PublishToWeb*" } | Select-Object -First 1
-
-$criticalSettings += [PSCustomObject]@{
-    Setting = "Publish to web (public internet)"
-    Current = if ($publishWebSetting.Enabled) { "Enabled" } else { "Disabled" }
-    EnabledFor = $publishWebSetting.EnabledFor
-    Recommendation = "Disable (public data exposure risk)"
-    Status = if ($publishWebSetting.Enabled -and $publishWebSetting.EnabledFor -eq "Entire Organization") { "Risk" } else { "OK" }
-    Severity = if ($publishWebSetting.Enabled -and $publishWebSetting.EnabledFor -eq "Entire Organization") { "High" } else { "Low" }
-}
-
-# Export capabilities
-$exportExcelSetting = $allSettings | Where-Object { $_.SettingName -like "*ExportToExcel*" } | Select-Object -First 1
-
-$criticalSettings += [PSCustomObject]@{
-    Setting = "Export to Excel"
-    Current = if ($exportExcelSetting.Enabled) { "Enabled" } else { "Disabled" }
-    EnabledFor = $exportExcelSetting.EnabledFor
-    Recommendation = "Enable (common business requirement)"
-    Status = if ($exportExcelSetting.Enabled) { "OK" } else { "Review" }
-    Severity = "Low"
-}
-
-# Sensitivity labels
-$sensitivitySetting = $allSettings | Where-Object { 
-    $_.SettingName -like "*InformationProtection*" -or 
-    $_.Title -like "*sensitivity label*"
-} | Select-Object -First 1
-
-$criticalSettings += [PSCustomObject]@{
-    Setting = "Sensitivity labels"
-    Current = if ($sensitivitySetting.Enabled) { "Enabled" } else { "Disabled" }
-    EnabledFor = $sensitivitySetting.EnabledFor
-    Recommendation = "Enable for compliance"
-    Status = if ($sensitivitySetting.Enabled) { "OK" } else { "Review" }
-    Severity = "High"
-}
-
-# Guest access
-$guestSetting = $allSettings | Where-Object { 
-    $_.SettingName -like "*Guest*" -or 
-    $_.Title -like "*Guest users*"
-} | Select-Object -First 1
-
-if ($guestSetting) {
-    $criticalSettings += [PSCustomObject]@{
-        Setting = "Guest user access"
-        Current = if ($guestSetting.Enabled) { "Enabled" } else { "Disabled" }
-        EnabledFor = $guestSetting.EnabledFor
-        Recommendation = "Review based on security policy"
-        Status = if ($guestSetting.Enabled) { "Review" } else { "OK" }
-        Severity = "Medium"
-    }
-}
-
-# Certification
-$certificationSetting = $allSettings | Where-Object { $_.SettingName -like "*Certification*" } | Select-Object -First 1
-
-if ($certificationSetting) {
-    $criticalSettings += [PSCustomObject]@{
-        Setting = "Dataset certification"
-        Current = if ($certificationSetting.Enabled) { "Enabled" } else { "Disabled" }
-        EnabledFor = $certificationSetting.EnabledFor
-        Recommendation = "Enable for governance"
-        Status = if ($certificationSetting.Enabled) { "OK" } else { "Review" }
-        Severity = "Medium"
-    }
-}
-
-# ============================================================================
-# ANALYSIS - Risky Settings
-# ============================================================================
-
-Write-Host "Identifying risky settings..." -ForegroundColor Yellow
-
-$riskyKeywords = @(
-    "PublishToWeb",
-    "ShareLinkToEntireOrganization", 
-    "AllowExternalDataSharingReceivers",
-    "ExportToCsv"
-)
-
-$riskySettings = $allSettings | Where-Object { 
-    $_.Enabled -eq $true -and 
-    ($riskyKeywords | Where-Object { $_.SettingName -like "*$_*" })
-} | ForEach-Object {
-    [PSCustomObject]@{
-        Setting = $_.Title
-        EnabledFor = $_.EnabledFor
-        Risk = "Public data exposure or unauthorized sharing"
-    }
-}
-
-# ============================================================================
-# ANALYSIS - Admin API Settings for Metadata Scanning
-# ============================================================================
-
-Write-Host "Checking Admin API settings..." -ForegroundColor Yellow
-
-$adminApiSettings = $allSettings | Where-Object { 
-    $_.SettingName -like "*Admin*" -or 
-    $_.SettingName -like "*Metadata*" -or
-    $_.Title -like "*admin API*" -or
-    $_.Title -like "*enhance*"
-} | ForEach-Object {
-    [PSCustomObject]@{
-        Setting = $_.Title
-        Enabled = $_.Enabled
-        EnabledFor = $_.EnabledFor
-        Impact = "Affects metadata scanning API capabilities"
-    }
-}
+$highRiskSettings = $allSettings | Where-Object { $_.SecurityRisk -eq "High Risk" }
+$complianceGaps = $allSettings | Where-Object { $_.SecurityRisk -like "*Gap*" }
+$goodPractices = $allSettings | Where-Object { $_.SecurityRisk -like "*Good Practice*" -or $_.SecurityRisk -eq "Compliant" }
 
 # ============================================================================
 # BUILD COMPREHENSIVE HTML REPORT
@@ -312,86 +357,101 @@ Write-Host "Building HTML report..." -ForegroundColor Yellow
 
 $sb = New-Object System.Text.StringBuilder
 
-# All settings table HTML
-$allSettingsTableHtml = ($allSettings | ForEach-Object {
-    $statusColor = if ($_.Enabled) { "#28a745" } else { "#6c757d" }
-    $statusText = if ($_.Enabled) { "ENABLED" } else { "DISABLED" }
+# Security summary metrics HTML
+$securityMetricsHtml = ($securitySummary | ForEach-Object {
+    $color = switch ($_.RiskLevel) {
+        "High Risk" { "#dc3545" }
+        "Medium Risk" { "#ffc107" }
+        "Compliance Gap" { "#fd7e14" }
+        "Governance Gap" { "#ffc107" }
+        "Review Required" { "#17a2b8" }
+        "Good Practice" { "#28a745" }
+        "Compliant" { "#28a745" }
+        "Secure" { "#28a745" }
+        "Acceptable" { "#17a2b8" }
+        default { "#6c757d" }
+    }
+    
+    "<div class='metric-card' style='border-left-color: $color;'>
+        <h4>$($_.RiskLevel)</h4>
+        <div class='value' style='color: $color;'>$($_.Count)</div>
+        <div class='subvalue'>$($_.Percentage)% of all settings</div>
+    </div>"
+}) -join "`n"
+
+# All settings table HTML with security evaluation
+$allSettingsTableHtml = ($allSettings | Sort-Object Category, Title | ForEach-Object {
+    $statusBadge = if ($_.Enabled) { 
+        "<span style='background:#28a745; color:white; padding:3px 8px; border-radius:10px; font-size:0.75em;'>ON</span>" 
+    } else { 
+        "<span style='background:#6c757d; color:white; padding:3px 8px; border-radius:10px; font-size:0.75em;'>OFF</span>" 
+    }
     
     "<tr>
         <td>$($_.Category)</td>
         <td><strong>$($_.Title)</strong><br><small style='color:#666;'>$($_.SettingName)</small></td>
-        <td style='text-align:center;'><span style='background: $statusColor; color: white; padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size:0.85em;'>$statusText</span></td>
+        <td style='text-align:center;'>$statusBadge</td>
         <td>$($_.EnabledFor)</td>
-        <td style='font-size:0.85em;'>$($_.AdditionalProperties)</td>
-    </tr>"
-}) -join "`n"
-
-# Category summary table HTML
-$categorySummaryHtml = ($categorySummary | ForEach-Object {
-    "<tr>
-        <td><strong>$($_.Category)</strong></td>
-        <td style='text-align:center;'>$($_.Total)</td>
-        <td style='text-align:center; color:#28a745;'><strong>$($_.Enabled)</strong></td>
-        <td style='text-align:center; color:#6c757d;'>$($_.Disabled)</td>
-        <td>
-            <div style='background:#e9ecef; border-radius:10px; overflow:hidden; height:20px;'>
-                <div style='background:linear-gradient(90deg,#28a745,#20c997); width:$($_.EnabledPercentage)%; height:100%; display:flex; align-items:center; justify-content:center; color:white; font-size:0.75em; font-weight:600;'>
-                    $($_.EnabledPercentage)%
-                </div>
-            </div>
+        <td style='text-align:center;'>
+            <span style='background:$($_.RiskColor); color:white; padding:4px 12px; border-radius:12px; font-weight:600; font-size:0.85em;'>
+                $($_.RiskIcon) $($_.SecurityRisk)
+            </span>
+            <br><small style='color:#666; font-size:0.8em;'>$($_.RiskReason)</small>
         </td>
     </tr>"
 }) -join "`n"
 
-# Critical settings table HTML
-$criticalSettingsHtml = ($criticalSettings | ForEach-Object {
-    $severityColor = switch ($_.Severity) {
-        "High" { "#dc3545" }
-        "Medium" { "#ffc107" }
-        "Low" { "#17a2b8" }
-        default { "#6c757d" }
-    }
-    
-    $statusBadge = switch ($_.Status) {
-        "OK" { "<span style='background:#d4edda; color:#155724; padding:4px 10px; border-radius:12px; font-size:0.8em; font-weight:600;'>✓ OK</span>" }
-        "Review" { "<span style='background:#fff3cd; color:#856404; padding:4px 10px; border-radius:12px; font-size:0.8em; font-weight:600;'>⚠ Review</span>" }
-        "Risk" { "<span style='background:#f8d7da; color:#721c24; padding:4px 10px; border-radius:12px; font-size:0.8em; font-weight:600;'>🚨 Risk</span>" }
-        default { $_.Status }
-    }
-    
-    "<tr>
-        <td><strong>$($_.Setting)</strong></td>
-        <td style='text-align:center;'>$($_.Current)</td>
-        <td>$($_.EnabledFor)</td>
-        <td>$($_.Recommendation)</td>
-        <td style='text-align:center;'><span style='background:$severityColor; color:white; padding:4px 10px; border-radius:12px; font-size:0.8em; font-weight:600;'>$($_.Severity)</span></td>
-        <td style='text-align:center;'>$statusBadge</td>
-    </tr>"
-}) -join "`n"
-
-# Risky settings HTML
-$riskySettingsHtml = if ($riskySettings) {
-    ($riskySettings | ForEach-Object {
+# High risk settings alert HTML
+$highRiskHtml = if ($highRiskSettings) {
+    ($highRiskSettings | ForEach-Object {
         "<div class='alert alert-danger'>
-            <strong>⚠️ $($_.Setting)</strong><br>
-            Enabled for: $($_.EnabledFor)<br>
-            <small>Risk: $($_.Risk)</small>
+            <strong>🚨 $($_.Title)</strong><br>
+            Status: $(if ($_.Enabled) { 'ENABLED' } else { 'DISABLED' }) | Enabled for: $($_.EnabledFor)<br>
+            <small>Risk: $($_.RiskReason)</small>
         </div>"
     }) -join "`n"
 } else {
-    "<div class='alert alert-success'><strong>✓ No high-risk settings enabled for entire organization</strong></div>"
+    "<div class='alert alert-success'><strong>✓ No high-risk settings found</strong></div>"
 }
 
-# Admin API settings HTML
-$adminApiHtml = ($adminApiSettings | ForEach-Object {
-    $statusColor = if ($_.Enabled) { "#d4edda" } else { "#fff3cd" }
-    $statusIcon = if ($_.Enabled) { "✓" } else { "⚠️" }
-    
-    "<div style='background:$statusColor; padding:15px; margin:10px 0; border-radius:8px; border-left:4px solid #667eea;'>
-        <strong>$statusIcon $($_.Setting)</strong><br>
-        <small style='color:#666;'>Status: $(if ($_.Enabled) { 'Enabled' } else { 'Disabled' }) | Enabled for: $($_.EnabledFor)</small><br>
-        <small style='color:#666;'>$($_.Impact)</small>
+# Compliance gaps HTML
+$complianceGapsHtml = if ($complianceGaps) {
+    ($complianceGaps | ForEach-Object {
+        "<div class='alert alert-warning'>
+            <strong>⚠️ $($_.Title)</strong><br>
+            Status: $(if ($_.Enabled) { 'ENABLED' } else { 'DISABLED' }) | Issue: $($_.RiskReason)<br>
+            <small>Recommendation: Enable this setting for better governance and compliance</small>
+        </div>"
+    }) -join "`n"
+} else {
+    "<div class='alert alert-success'><strong>✓ No compliance gaps identified</strong></div>"
+}
+
+# Good practices HTML
+$goodPracticesHtml = if ($goodPractices) {
+    "<div class='alert alert-success'>
+        <strong>✓ Good Practices Implemented: $($goodPractices.Count)</strong><br>
+        <small>Settings properly configured: " + (($goodPractices | Select-Object -First 5 -ExpandProperty Title) -join ", ") + "...</small>
     </div>"
+} else {
+    ""
+}
+
+# Category summary table HTML
+$categorySummaryHtml = ($categorySummary | ForEach-Object {
+    $riskIndicator = if ($_.HighRisk -gt 0) {
+        "<span style='color:#dc3545; font-weight:bold;'>⚠️ $($_.HighRisk)</span>"
+    } else {
+        "<span style='color:#28a745;'>✓</span>"
+    }
+    
+    "<tr>
+        <td><strong>$($_.Category)</strong></td>
+        <td style='text-align:center;'>$($_.Total)</td>
+        <td style='text-align:center;'>$riskIndicator</td>
+        <td style='text-align:center;'>$(if ($_.MediumRisk -gt 0) { "<span style='color:#ffc107;'>$($_.MediumRisk)</span>" } else { "—" })</td>
+        <td style='text-align:center;'>$(if ($_.ComplianceGaps -gt 0) { "<span style='color:#fd7e14;'>$($_.ComplianceGaps)</span>" } else { "—" })</td>
+    </tr>"
 }) -join "`n"
 
 # Build complete HTML
@@ -401,7 +461,7 @@ $adminApiHtml = ($adminApiSettings | ForEach-Object {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Power BI Tenant Settings Report - $reportDate</title>
+    <title>Power BI Tenant Settings Security Report - $reportDate</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
@@ -414,12 +474,13 @@ $adminApiHtml = ($adminApiSettings | ForEach-Object {
         .section h3 { color: #764ba2; margin-top: 25px; margin-bottom: 15px; font-size: 1.3em; }
         table { width: 100%; border-collapse: collapse; margin: 20px 0; }
         th { background: #667eea; color: white; padding: 12px; text-align: left; font-weight: 600; position: sticky; top: 0; }
-        td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; }
+        td { padding: 10px 12px; border-bottom: 1px solid #e0e0e0; vertical-align: top; }
         tr:hover { background: #f8f9fa; }
-        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin: 20px 0; }
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin: 20px 0; }
         .metric-card { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); padding: 20px; border-radius: 8px; border-left: 4px solid #667eea; }
         .metric-card h4 { color: #555; font-size: 0.9em; margin-bottom: 10px; text-transform: uppercase; }
         .metric-card .value { font-size: 2em; font-weight: bold; color: #333; }
+        .metric-card .subvalue { color: #666; font-size: 0.85em; margin-top: 5px; }
         .alert { padding: 15px 20px; border-radius: 8px; margin: 15px 0; border-left: 4px solid; }
         .alert-danger { background: #f8d7da; border-color: #dc3545; color: #721c24; }
         .alert-warning { background: #fff3cd; border-color: #ffc107; color: #856404; }
@@ -430,78 +491,52 @@ $adminApiHtml = ($adminApiSettings | ForEach-Object {
 <body>
     <div class="container">
         <header>
-            <h1>⚙️ Power BI Tenant Settings Report</h1>
+            <h1>🔐 Power BI Tenant Settings Security Report</h1>
             <p>Generated: $reportDate</p>
-            <p>Source: Fabric API (api.fabric.microsoft.com)</p>
+            <p>Source: Fabric API | Total Settings Analyzed: $($allSettings.Count)</p>
         </header>
         
-        <!-- SUMMARY METRICS -->
+        <!-- SECURITY POSTURE SUMMARY -->
         <div class="section">
-            <h2>📊 Summary</h2>
+            <h2>🎯 Security Posture Overview</h2>
             <div class="metric-grid">
-                <div class="metric-card">
-                    <h4>Total Settings</h4>
-                    <div class="value">$($allSettings.Count)</div>
-                </div>
-                <div class="metric-card">
-                    <h4>Enabled</h4>
-                    <div class="value" style="color:#28a745;">$(($allSettings | Where-Object { $_.Enabled -eq $true }).Count)</div>
-                </div>
-                <div class="metric-card">
-                    <h4>Disabled</h4>
-                    <div class="value" style="color:#6c757d;">$(($allSettings | Where-Object { $_.Enabled -eq $false }).Count)</div>
-                </div>
-                <div class="metric-card">
-                    <h4>Categories</h4>
-                    <div class="value">$($categorySummary.Count)</div>
-                </div>
+                $securityMetricsHtml
             </div>
         </div>
         
-        <!-- CRITICAL SETTINGS -->
+        <!-- HIGH RISK SETTINGS -->
         <div class="section">
-            <h2>🔍 Critical Settings Review</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Setting</th>
-                        <th>Current</th>
-                        <th>Enabled For</th>
-                        <th>Recommendation</th>
-                        <th>Severity</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    $criticalSettingsHtml
-                </tbody>
-            </table>
+            <h2>🚨 High Risk Settings</h2>
+            <p>Settings that pose significant security or compliance risks in their current state.</p>
+            $highRiskHtml
         </div>
         
-        <!-- RISKY SETTINGS -->
+        <!-- COMPLIANCE GAPS -->
         <div class="section">
-            <h2>⚠️ Risky Settings Analysis</h2>
-            $riskySettingsHtml
+            <h2>📋 Compliance & Governance Gaps</h2>
+            <p>Settings that should be enabled for better governance, compliance, and security.</p>
+            $complianceGapsHtml
         </div>
         
-        <!-- ADMIN API SETTINGS -->
-        <div class="section">
-            <h2>🔌 Admin API Settings (for Metadata Scanning)</h2>
-            <p>These settings affect your ability to use admin APIs for governance and metadata extraction.</p>
-            $adminApiHtml
-        </div>
+        <!-- GOOD PRACTICES -->
+        $(if ($goodPractices) {
+            "<div class='section'>
+                <h2>✅ Implemented Good Practices</h2>
+                $goodPracticesHtml
+            </div>"
+        })
         
-        <!-- CATEGORY BREAKDOWN -->
+        <!-- CATEGORY RISK ANALYSIS -->
         <div class="section">
-            <h2>📁 Settings by Category</h2>
+            <h2>📁 Risk Analysis by Category</h2>
             <table>
                 <thead>
                     <tr>
                         <th>Category</th>
-                        <th style="text-align:center;">Total</th>
-                        <th style="text-align:center;">Enabled</th>
-                        <th style="text-align:center;">Disabled</th>
-                        <th>Enabled %</th>
+                        <th style="text-align:center;">Total Settings</th>
+                        <th style="text-align:center;">High Risk</th>
+                        <th style="text-align:center;">Medium Risk</th>
+                        <th style="text-align:center;">Compliance Gaps</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -510,10 +545,10 @@ $adminApiHtml = ($adminApiSettings | ForEach-Object {
             </table>
         </div>
         
-        <!-- ALL SETTINGS TABLE -->
+        <!-- ALL SETTINGS WITH SECURITY EVALUATION -->
         <div class="section">
-            <h2>📋 All Tenant Settings</h2>
-            <p>Complete list of all $($allSettings.Count) tenant settings. Use Ctrl+F to search.</p>
+            <h2>📋 All Tenant Settings (with Security Evaluation)</h2>
+            <p>Complete list with risk assessment for each setting. Use Ctrl+F to search.</p>
             <table>
                 <thead>
                     <tr>
@@ -521,7 +556,7 @@ $adminApiHtml = ($adminApiSettings | ForEach-Object {
                         <th>Setting</th>
                         <th style="text-align:center;">Status</th>
                         <th>Enabled For</th>
-                        <th>Additional Properties</th>
+                        <th style="text-align:center; min-width:200px;">Security Evaluation</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -531,8 +566,8 @@ $adminApiHtml = ($adminApiSettings | ForEach-Object {
         </div>
         
         <footer>
-            <p>Power BI Tenant Settings Report | Generated: $reportDate</p>
-            <p>CSV Export: $csvPath</p>
+            <p>Power BI Tenant Settings Security Report</p>
+            <p>Generated: $reportDate | CSV Export: $csvPath</p>
         </footer>
     </div>
 </body>
@@ -540,14 +575,19 @@ $adminApiHtml = ($adminApiSettings | ForEach-Object {
 "@)
 
 # Save HTML
-$htmlPath = "PowerBI_TenantSettings_Report_$timestamp.html"
+$htmlPath = "PowerBI_TenantSettings_SecurityReport_$timestamp.html"
 $sb.ToString() | Out-File -FilePath $htmlPath -Encoding UTF8
 
 Write-Host "`n========================================" -ForegroundColor Green
 Write-Host "✓ EXPORT COMPLETE" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Green
-Write-Host "CSV File:  $csvPath" -ForegroundColor White
-Write-Host "HTML Report: $htmlPath" -ForegroundColor White
+Write-Host "Total Settings: $($allSettings.Count)" -ForegroundColor White
+Write-Host "High Risk: $(($highRiskSettings).Count)" -ForegroundColor Red
+Write-Host "Compliance Gaps: $(($complianceGaps).Count)" -ForegroundColor Yellow
+Write-Host "Good Practices: $(($goodPractices).Count)" -ForegroundColor Green
+Write-Host "`nFiles created:" -ForegroundColor Cyan
+Write-Host "  CSV:  $csvPath" -ForegroundColor White
+Write-Host "  HTML: $htmlPath" -ForegroundColor White
 Write-Host "`nOpening HTML report..." -ForegroundColor Cyan
 
 Start-Process $htmlPath
